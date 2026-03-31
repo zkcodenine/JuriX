@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JuriX</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a0a;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      user-select: none;
+      overflow: hidden;
+    }
+
+    .logo {
+      width: 90px;
+      height: 90px;
+      margin-bottom: 24px;
+    }
+
+    .title {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 6px;
+      color: #c9a84c;
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      font-size: 11px;
+      color: #555;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-bottom: 40px;
+    }
+
+    /* Spinner */
+    .spinner-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 2px solid #222;
+      border-top-color: #c9a84c;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .status {
+      font-size: 12px;
+      color: #555;
+      letter-spacing: 1px;
+      min-height: 18px;
+      transition: color 0.3s;
+    }
+
+    /* Update progress bar */
+    .progress-wrap {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      width: 280px;
+    }
+
+    .progress-bar-bg {
+      width: 100%;
+      height: 3px;
+      background: #1a1a1a;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #a07a2a, #e8c96c);
+      width: 0%;
+      transition: width 0.3s ease;
+      border-radius: 2px;
+    }
+
+    .progress-label {
+      font-size: 11px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <!-- Logo rendered as inline SVG so it works without a file on disk -->
+  <svg class="logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="gold" x1="0%" y1="100%" x2="100%" y2="0%">
+        <stop offset="0%" style="stop-color:#8a6820"/>
+        <stop offset="100%" style="stop-color:#e8c96c"/>
+      </linearGradient>
+    </defs>
+    <!-- Three ascending bars (mirroring the logo shape) -->
+    <rect x="10" y="60" width="18" height="32" rx="2" fill="url(#gold)" opacity="0.7"/>
+    <rect x="36" y="40" width="18" height="52" rx="2" fill="url(#gold)" opacity="0.85"/>
+    <rect x="62" y="18" width="18" height="74" rx="2" fill="url(#gold)"/>
+  </svg>
+
+  <div class="title">JURIX</div>
+  <div class="subtitle">Sistema Jurídico</div>
+
+  <div class="spinner-wrap" id="spinnerWrap">
+    <div class="spinner"></div>
+    <div class="status" id="statusText">Iniciando...</div>
+  </div>
+
+  <div class="progress-wrap" id="progressWrap">
+    <div class="status" id="updateText">Baixando atualização...</div>
+    <div class="progress-bar-bg">
+      <div class="progress-bar-fill" id="progressFill"></div>
+    </div>
+    <div class="progress-label" id="progressLabel">0%</div>
+  </div>
+
+  <script>
+    const statusEl = document.getElementById('statusText')
+    const spinnerWrap = document.getElementById('spinnerWrap')
+    const progressWrap = document.getElementById('progressWrap')
+    const progressFill = document.getElementById('progressFill')
+    const progressLabel = document.getElementById('progressLabel')
+    const updateText = document.getElementById('updateText')
+
+    const messages = [
+      'Iniciando...',
+      'Conectando ao banco de dados...',
+      'Carregando módulos...',
+      'Quase pronto...',
+    ]
+    let msgIdx = 0
+
+    const cycleMsg = setInterval(() => {
+      msgIdx = (msgIdx + 1) % messages.length
+      statusEl.textContent = messages[msgIdx]
+    }, 1800)
+
+    // Listen for updater events from main process
+    if (window.jurixUpdater) {
+      window.jurixUpdater.onStatus((data) => {
+        if (data.event === 'available') {
+          clearInterval(cycleMsg)
+          statusEl.textContent = `Atualização ${data.version} encontrada…`
+        }
+        if (data.event === 'progress') {
+          spinnerWrap.style.display = 'none'
+          progressWrap.style.display = 'flex'
+          progressFill.style.width = data.percent + '%'
+          progressLabel.textContent = data.percent + '%'
+          updateText.textContent = `Baixando versão ${data.percent}%…`
+        }
+        if (data.event === 'downloaded') {
+          updateText.textContent = 'Atualização concluída. Reiniciando...'
+          progressFill.style.width = '100%'
+        }
+      })
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,428 @@
+// ══════════════════════════════════════════════════
+//  JuriX — Prisma Schema
+//  Banco: PostgreSQL
+// ══════════════════════════════════════════════════
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Usuários ──────────────────────────────────────
+model Usuario {
+  id               String          @id @default(uuid())
+  nome             String
+  email            String          @unique
+  senha            String
+  oab              String?
+  telefone         String?
+  avatar           String?
+  tema             Tema            @default(ESCURO)
+  plano            Plano           @default(GRATUITO)
+  planoExpiracao   DateTime?
+  aceitouTermos    Boolean         @default(false)
+  ativo            Boolean         @default(true)
+  criadoEm        DateTime        @default(now())
+  atualizadoEm    DateTime        @updatedAt
+
+  processos        Processo[]
+  tarefas          Tarefa[]
+  notificacoes     Notificacao[]
+  auditLogs        AuditLog[]
+  configuracoes    Configuracao[]
+  modelosDocumento ModeloDocumento[]
+  etiquetasAgenda  EtiquetaAgenda[]
+  eventosAgenda    EventoAgenda[]
+
+  @@map("usuarios")
+}
+
+enum Plano {
+  GRATUITO
+  MENSAL
+  ANUAL
+  VITALICIO
+}
+
+enum Tema {
+  ESCURO
+  CLARO
+}
+
+// ─── Processos ─────────────────────────────────────
+model Processo {
+  id                    String              @id @default(uuid())
+  usuarioId             String
+  numero                String
+  numeroCnj             String?             @unique
+  tribunal              String?
+  vara                  String?
+  classe                String?
+  assunto               String?
+  status                StatusProcesso      @default(ATIVO)
+  valor                 Decimal?            @db.Decimal(15, 2)
+  dataDistribuicao      DateTime?
+  dataUltimaAtualizacao DateTime?
+  origemDados           String?             @default("manual")
+  monitoramentoAtivo    Boolean             @default(false)
+  observacoes           String?
+  criadoEm             DateTime            @default(now())
+  atualizadoEm         DateTime            @updatedAt
+
+  usuario              Usuario             @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  partes               Parte[]
+  advogados            AdvogadoProcesso[]
+  movimentacoes        Movimentacao[]
+  tarefas              Tarefa[]
+  documentos           Documento[]
+  honorarios           Honorario[]
+  notificacoes         Notificacao[]
+  prazos               Prazo[]
+  anotacoes            Anotacao[]
+
+  @@index([usuarioId])
+  @@index([numeroCnj])
+  @@index([status])
+  @@map("processos")
+}
+
+enum StatusProcesso {
+  ATIVO
+  SUSPENSO
+  ARQUIVADO
+  ENCERRADO
+  AGUARDANDO
+}
+
+// ─── Partes ────────────────────────────────────────
+model Parte {
+  id         String     @id @default(uuid())
+  processoId String
+  nome       String
+  tipo       TipoParte
+  cpfCnpj    String?
+  email      String?
+  telefone   String?
+  criadoEm  DateTime   @default(now())
+
+  processo   Processo   @relation(fields: [processoId], references: [id], onDelete: Cascade)
+
+  @@index([processoId])
+  @@map("partes")
+}
+
+enum TipoParte {
+  AUTOR
+  REU
+  TERCEIRO
+  INTERESSADO
+  TESTEMUNHA
+}
+
+// ─── Advogados vinculados ao processo ──────────────
+model AdvogadoProcesso {
+  id         String   @id @default(uuid())
+  processoId String
+  nome       String
+  oab        String?
+  email      String?
+  polo       String?  // ex: "autor", "réu"
+  criadoEm  DateTime @default(now())
+
+  processo   Processo @relation(fields: [processoId], references: [id], onDelete: Cascade)
+
+  @@index([processoId])
+  @@map("advogados_processo")
+}
+
+// ─── Movimentações ─────────────────────────────────
+model Movimentacao {
+  id          String   @id @default(uuid())
+  processoId  String
+  data        DateTime
+  descricao   String   @db.Text
+  tipo        String?
+  origemApi   String?  @default("manual")
+  hashExterno String?  @unique
+  criadoEm   DateTime @default(now())
+
+  processo    Processo @relation(fields: [processoId], references: [id], onDelete: Cascade)
+
+  @@index([processoId])
+  @@index([data])
+  @@map("movimentacoes")
+}
+
+// ─── Tarefas ───────────────────────────────────────
+model Tarefa {
+  id          String        @id @default(uuid())
+  processoId  String?
+  usuarioId   String
+  titulo      String
+  descricao   String?       @db.Text
+  prazo       DateTime?
+  prioridade  Prioridade    @default(MEDIA)
+  status      StatusTarefa  @default(PENDENTE)
+  criadoEm   DateTime      @default(now())
+  atualizadoEm DateTime    @updatedAt
+
+  processo    Processo?     @relation(fields: [processoId], references: [id], onDelete: SetNull)
+  usuario     Usuario       @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  subtarefas  Subtarefa[]
+
+  @@index([processoId])
+  @@index([usuarioId])
+  @@index([status])
+  @@map("tarefas")
+}
+
+enum Prioridade {
+  BAIXA
+  MEDIA
+  ALTA
+  URGENTE
+}
+
+enum StatusTarefa {
+  PENDENTE
+  EM_ANDAMENTO
+  CONCLUIDA
+  CANCELADA
+}
+
+// ─── Subtarefas ────────────────────────────────────
+model Subtarefa {
+  id        String       @id @default(uuid())
+  tarefaId  String
+  titulo    String
+  status    StatusTarefa @default(PENDENTE)
+  criadoEm DateTime     @default(now())
+
+  tarefa    Tarefa       @relation(fields: [tarefaId], references: [id], onDelete: Cascade)
+
+  @@index([tarefaId])
+  @@map("subtarefas")
+}
+
+// ─── Prazos ────────────────────────────────────────
+model Prazo {
+  id          String      @id @default(uuid())
+  processoId  String
+  titulo      String
+  descricao   String?
+  dataVencimento DateTime
+  tipo        TipoPrazo   @default(PROCESSUAL)
+  status      StatusPrazo @default(PENDENTE)
+  alertaDias  Int         @default(3)
+  criadoEm   DateTime    @default(now())
+
+  processo    Processo    @relation(fields: [processoId], references: [id], onDelete: Cascade)
+
+  @@index([processoId])
+  @@index([dataVencimento])
+  @@map("prazos")
+}
+
+enum TipoPrazo {
+  PROCESSUAL
+  RECURSAL
+  PRESCRICIONAL
+  DECADENCIAL
+  OUTRO
+}
+
+enum StatusPrazo {
+  PENDENTE
+  CUMPRIDO
+  PERDIDO
+}
+
+// ─── Documentos ────────────────────────────────────
+model Documento {
+  id          String   @id @default(uuid())
+  processoId  String
+  nome        String
+  arquivo     String
+  tamanho     Int?
+  mimeType    String?
+  descricao   String?
+  criadoEm   DateTime @default(now())
+
+  processo    Processo @relation(fields: [processoId], references: [id], onDelete: Cascade)
+
+  @@index([processoId])
+  @@map("documentos")
+}
+
+// ─── Honorários ────────────────────────────────────
+model Honorario {
+  id           String    @id @default(uuid())
+  processoId   String
+  valorTotal   Decimal   @db.Decimal(15, 2)
+  descricao    String?
+  status       String    @default("pendente")
+  criadoEm    DateTime  @default(now())
+  atualizadoEm DateTime  @updatedAt
+
+  processo     Processo  @relation(fields: [processoId], references: [id], onDelete: Cascade)
+  parcelas     Parcela[]
+
+  @@index([processoId])
+  @@map("honorarios")
+}
+
+// ─── Parcelas ──────────────────────────────────────
+model Parcela {
+  id           String        @id @default(uuid())
+  honorarioId  String
+  valor        Decimal       @db.Decimal(15, 2)
+  vencimento   DateTime
+  status       StatusParcela @default(PENDENTE)
+  dataPagamento DateTime?
+  observacao   String?
+  criadoEm    DateTime      @default(now())
+
+  honorario    Honorario     @relation(fields: [honorarioId], references: [id], onDelete: Cascade)
+
+  @@index([honorarioId])
+  @@map("parcelas")
+}
+
+enum StatusParcela {
+  PENDENTE
+  PAGO
+  ATRASADO
+  CANCELADO
+}
+
+// ─── Anotações ─────────────────────────────────────
+model Anotacao {
+  id          String   @id @default(uuid())
+  processoId  String
+  titulo      String?
+  conteudo    String   @db.Text
+  criadoEm   DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  processo    Processo @relation(fields: [processoId], references: [id], onDelete: Cascade)
+
+  @@index([processoId])
+  @@map("anotacoes")
+}
+
+// ─── Notificações ──────────────────────────────────
+model Notificacao {
+  id         String            @id @default(uuid())
+  usuarioId  String
+  processoId String?
+  titulo     String
+  mensagem   String            @db.Text
+  tipo       TipoNotificacao   @default(INFO)
+  lida       Boolean           @default(false)
+  criadoEm  DateTime          @default(now())
+
+  usuario    Usuario           @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  processo   Processo?         @relation(fields: [processoId], references: [id], onDelete: SetNull)
+
+  @@index([usuarioId])
+  @@index([lida])
+  @@map("notificacoes")
+}
+
+enum TipoNotificacao {
+  MOVIMENTACAO
+  PRAZO
+  TAREFA
+  HONORARIO
+  SISTEMA
+  INFO
+}
+
+// ─── Configurações do escritório ───────────────────
+model Configuracao {
+  id        String   @id @default(uuid())
+  usuarioId String
+  chave     String
+  valor     String   @db.Text
+  criadoEm DateTime @default(now())
+
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, chave])
+  @@index([usuarioId])
+  @@map("configuracoes")
+}
+
+// ─── Modelos de documentos ──────────────────────────
+model ModeloDocumento {
+  id           String   @id @default(uuid())
+  usuarioId    String
+  nome         String
+  descricao    String?
+  conteudo     String   @db.Text
+  categoria    String?
+  criadoEm    DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  usuario      Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@map("modelos_documento")
+}
+
+// ─── Etiquetas da Agenda ────────────────────────────
+model EtiquetaAgenda {
+  id        String         @id @default(uuid())
+  usuarioId String
+  nome      String
+  cor       String         @default("#C9A84C")
+  criadoEm  DateTime       @default(now())
+
+  usuario   Usuario        @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  eventos   EventoAgenda[]
+
+  @@index([usuarioId])
+  @@map("etiquetas_agenda")
+}
+
+// ─── Eventos da Agenda ──────────────────────────────
+model EventoAgenda {
+  id           String          @id @default(uuid())
+  usuarioId    String
+  etiquetaId   String?
+  titulo       String
+  data         DateTime
+  horario      String?
+  descricao    String?
+  criadoEm    DateTime        @default(now())
+  atualizadoEm DateTime        @updatedAt
+
+  usuario   Usuario         @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  etiqueta  EtiquetaAgenda? @relation(fields: [etiquetaId], references: [id], onDelete: SetNull)
+
+  @@index([usuarioId])
+  @@index([data])
+  @@map("eventos_agenda")
+}
+
+// ─── Logs de auditoria ─────────────────────────────
+model AuditLog {
+  id        String   @id @default(uuid())
+  usuarioId String?
+  acao      String
+  entidade  String
+  entidadeId String?
+  dados     Json?
+  ip        String?
+  criadoEm DateTime @default(now())
+
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  @@index([usuarioId])
+  @@index([criadoEm])
+  @@map("audit_logs")
+}
