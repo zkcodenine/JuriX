@@ -1,0 +1,117 @@
+{
+  "name": "jurix",
+  "version": "3.0.0",
+  "description": "JuriX — Sistema de Gestão Jurídica",
+  "main": "electron/main.js",
+  "author": {
+    "name": "JuriX",
+    "email": "contato@jurix.com.br"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "dev:all": "concurrently -k -n BACK,FRONT,ELECTRON -c cyan,green,blue \"cd backend && node src/server.js\" \"cd frontend && npm run dev\" \"wait-on http://localhost:3001/health && electron . --dev\"",
+    "build:frontend": "cd frontend && npm run build",
+    "build": "npm run build:frontend && electron-builder --win",
+    "build:dir": "npm run build:frontend && electron-builder --dir",
+    "dist": "npm run build:frontend && electron-builder --publish always",
+    "process-icon": "node scripts/process-icon.js"
+  },
+  "dependencies": {
+    "electron-log": "^5.2.0",
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3",
+    "png-to-ico": "^2.1.8",
+    "sharp": "^0.33.4",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.jurix.app",
+    "productName": "JuriX",
+    "copyright": "Copyright © 2026 JuriX",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/sharp/**/*",
+      "node_modules/@img/**/*"
+    ],
+    "directories": {
+      "output": "dist-electron",
+      "buildResources": "electron/assets"
+    },
+    "files": [
+      "electron/**/*",
+      "!electron/assets/logo-original.*"
+    ],
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!.env.example",
+          "!nodemon.json",
+          "!Dockerfile",
+          "!.git/**/*",
+          "!logs/**/*"
+        ]
+      },
+      {
+        "from": "frontend/dist",
+        "to": "frontend/dist"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "electron/assets/icon.ico",
+      "publisherName": "JuriX"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "JuriX",
+      "installerIcon": "electron/assets/icon.ico",
+      "uninstallerIcon": "electron/assets/icon.ico",
+      "installerHeaderIcon": "electron/assets/icon.ico",
+      "deleteAppDataOnUninstall": false
+    },
+    "mac": {
+      "icon": "electron/assets/icon.icns",
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg"
+      ]
+    },
+    "linux": {
+      "icon": "electron/assets/icon.png",
+      "category": "Office",
+      "target": [
+        "AppImage"
+      ]
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "zkcodenine",
+      "repo": "JuriX",
+      "releaseType": "release"
+    }
+  }
+}

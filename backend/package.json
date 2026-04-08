@@ -1,0 +1,38 @@
+{
+  "name": "jurix-backend",
+  "version": "2.0.0",
+  "description": "JuriX — Sistema Jurídico Backend API",
+  "main": "src/server.js",
+  "scripts": {
+    "start":        "node src/server.js",
+    "dev":          "nodemon src/server.js",
+    "db:migrate":   "prisma migrate dev",
+    "db:push":      "prisma db push",
+    "db:generate":  "prisma generate",
+    "db:studio":    "prisma studio",
+    "db:seed":      "node prisma/seed.js",
+    "postinstall":  "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.10.0",
+    "axios":            "^1.6.7",
+    "bcryptjs":         "^2.4.3",
+    "compression":      "^1.7.4",
+    "cors":             "^2.8.5",
+    "dotenv":           "^16.4.4",
+    "express":          "^4.18.3",
+    "express-rate-limit":"^7.2.0",
+    "express-validator":"^7.0.1",
+    "helmet":           "^7.1.0",
+    "ioredis":          "^5.3.2",
+    "jsonwebtoken":     "^9.0.2",
+    "multer":           "^1.4.5-lts.1",
+    "node-cron":        "^3.0.3",
+    "uuid":             "^9.0.1",
+    "winston":          "^3.12.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0",
+    "prisma":  "^5.10.0"
+  }
+}
