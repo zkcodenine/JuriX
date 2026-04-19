@@ -1,6 +1,6 @@
 {
   "name": "jurix",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "description": "JuriX — Sistema de Gestão Jurídica",
   "main": "electron/main.js",
   "author": {
@@ -84,15 +84,19 @@
       "publisherName": "JuriX"
     },
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "JuriX",
+      "runAfterFinish": true,
       "installerIcon": "electron/assets/icon.ico",
       "uninstallerIcon": "electron/assets/icon.ico",
       "installerHeaderIcon": "electron/assets/icon.ico",
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "differentialPackage": true
     },
     "mac": {
       "icon": "electron/assets/icon.icns",
