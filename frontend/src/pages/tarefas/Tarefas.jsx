@@ -9,6 +9,43 @@ import { formatarData, formatarTempoRelativo, prioridadeLabel, statusTarefaLabel
 const priorCor = { URGENTE: '#ef4444', ALTA: '#f59e0b', MEDIA: '#C9A84C', BAIXA: '#10b981' };
 const priorIcon = { URGENTE: 'fa-fire', ALTA: 'fa-arrow-up', MEDIA: 'fa-minus', BAIXA: 'fa-arrow-down' };
 
+/* ─── Modal genérico de confirmação de exclusão ─────── */
+function ConfirmDeleteModal({ title, message, onConfirm, onCancel, loading }) {
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,.88)', backdropFilter: 'blur(8px)' }}
+      onClick={e => e.target === e.currentTarget && onCancel()}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl overflow-hidden animate-scaleIn text-center"
+        style={{ background: 'var(--glass-bg)', backdropFilter: 'blur(24px) saturate(1.3)', WebkitBackdropFilter: 'blur(24px) saturate(1.3)', border: '1px solid var(--border)' }}
+      >
+        <div className="p-6">
+          <div className="flex items-center justify-center rounded-2xl mx-auto mb-4" style={{ width: 52, height: 52, background: 'rgba(239,68,68,.1)' }}>
+            <i className="fas fa-trash text-lg" style={{ color: 'var(--danger)' }} />
+          </div>
+          <h3 className="text-sm font-bold mb-1">{title}</h3>
+          {message && <p className="text-xs mb-5" style={{ color: 'var(--text-muted)' }}>{message}</p>}
+          <div className="flex gap-3 mt-4">
+            <button onClick={onCancel} className="btn btn-ghost flex-1 text-sm">Cancelar</button>
+            <button
+              onClick={onConfirm}
+              disabled={loading}
+              className="btn flex-1 text-sm font-semibold"
+              style={{ background: 'var(--danger)', color: '#fff' }}
+            >
+              {loading ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <i className="fas fa-trash" />}
+              {' '}Excluir
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 /* ─── Card de tarefa ─────────────────────────────────────── */
 function TarefaCard({ tarefa, onToggle, onDelete, onEdit, onToggleSub }) {
   const navigate = useNavigate();
@@ -30,7 +67,7 @@ function TarefaCard({ tarefa, onToggle, onDelete, onEdit, onToggleSub }) {
     >
       {/* Clickable banner */}
       <div
-        className="flex items-start gap-3 p-4 cursor-pointer transition-colors hover:bg-white/[.02]"
+        className="flex items-start gap-2.5 px-3 py-3 cursor-pointer transition-colors hover:bg-white/[.02]"
         onClick={() => setExpanded(ex => !ex)}
       >
         {/* Check circle — stops propagation to avoid toggling actions */}
@@ -55,7 +92,7 @@ function TarefaCard({ tarefa, onToggle, onDelete, onEdit, onToggleSub }) {
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          <p className={`font-semibold text-sm leading-snug ${isDone ? 'line-through' : ''}`}
+          <p className={`font-bold text-base leading-snug ${isDone ? 'line-through' : ''}`}
             style={{ color: isDone ? 'var(--text-muted)' : 'var(--text-primary)' }}>
             {tarefa.titulo}
           </p>
@@ -141,7 +178,7 @@ function TarefaCard({ tarefa, onToggle, onDelete, onEdit, onToggleSub }) {
             <i className="fas fa-pen text-[11px]" />
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); if (window.confirm('Excluir esta tarefa?')) onDelete(tarefa.id); }}
+            onClick={(e) => { e.stopPropagation(); onDelete(tarefa); }}
             className="flex items-center justify-center rounded-lg transition-all hover:bg-red-500/10"
             style={{ width: 30, height: 30, color: 'var(--text-muted)' }}
             title="Excluir tarefa"
@@ -598,6 +635,7 @@ export default function Tarefas() {
   const [busca, setBusca] = useState('');
   const [showFiltros, setShowFiltros] = useState(false);
   const [concluindoTarefa, setConcluindoTarefa] = useState(null);
+  const [confirmDeleteTarefa, setConfirmDeleteTarefa] = useState(null);
 
   const { data: tarefas = [], isLoading } = useQuery({
     queryKey: ['tarefas', filtroStatus, filtroPrioridade],
@@ -790,7 +828,7 @@ export default function Tarefas() {
                   toggleMutation.mutate({ id: t.id, status: t.status });
                 }
               }}
-              onDelete={(id) => deleteMutation.mutate(id)}
+              onDelete={(t) => setConfirmDeleteTarefa(t)}
               onEdit={(t) => setEditTarefa(t)}
               onToggleSub={(tarefaId, sub) => toggleSubMutation.mutate({ tarefaId, sub })}
             />
@@ -807,6 +845,15 @@ export default function Tarefas() {
           onClose={() => setConcluindoTarefa(null)}
           onConfirm={(obs) => toggleMutation.mutate({ id: concluindoTarefa.id, status: concluindoTarefa.status, observacaoConclusao: obs || null })}
           isPending={toggleMutation.isPending}
+        />
+      )}
+      {confirmDeleteTarefa && (
+        <ConfirmDeleteModal
+          title={`Excluir "${confirmDeleteTarefa.titulo}"?`}
+          message="Esta ação não pode ser desfeita."
+          onConfirm={() => { deleteMutation.mutate(confirmDeleteTarefa.id); setConfirmDeleteTarefa(null); }}
+          onCancel={() => setConfirmDeleteTarefa(null)}
+          loading={deleteMutation.isPending}
         />
       )}
     </div>

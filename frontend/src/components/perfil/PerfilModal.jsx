@@ -232,9 +232,12 @@ function AvatarUpload({ usuario, avatarUrl, onUpdate }) {
             transition: 'box-shadow .25s',
           }}
         >
-          {avatarUrl
-            ? <img src={`${avatarUrl}?t=${Date.now()}`} alt="avatar" className="w-full h-full object-cover" />
-            : initials}
+          <img
+            src={avatarUrl ? `${avatarUrl}?t=${Date.now()}` : '/default-avatar.svg'}
+            alt="avatar"
+            className="w-full h-full object-cover"
+            onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }}
+          />
         </div>
         <div
           className="absolute inset-0 flex items-center justify-center transition-all"
@@ -283,7 +286,14 @@ export default function PerfilModal({ onClose }) {
   const [dados, setDados] = useState({ nome: usuario?.nome || '', oab: usuario?.oab || '', telefone: usuario?.telefone || '' });
   const [senhas, setSenhas] = useState({ senhaAtual: '', novaSenha: '', confirmar: '' });
   const [showSenhas, setShowSenhas] = useState({ atual: false, nova: false, conf: false });
-  const avatarUrl = usuario?.avatar ? `${window.location.origin.replace(':3000', ':3001')}${usuario.avatar}` : null;
+  const avatarUrl = (() => {
+    if (!usuario?.avatar) return null;
+    if (/^https?:/i.test(usuario.avatar)) return usuario.avatar;
+    const origin = window.location.port === '3000'
+      ? window.location.origin.replace(':3000', ':3001')
+      : window.location.origin;
+    return `${origin}${usuario.avatar.startsWith('/') ? '' : '/'}${usuario.avatar}`;
+  })();
 
   // Fechar com ESC
   useEffect(() => {
@@ -300,14 +310,22 @@ export default function PerfilModal({ onClose }) {
 
   const { mutate: alterarSenha, isPending: alterando } = useMutation({
     mutationFn: () => api.post('/auth/alterar-senha', { senhaAtual: senhas.senhaAtual, novaSenha: senhas.novaSenha }),
-    onSuccess: () => { toast.success('Senha alterada!'); setSenhas({ senhaAtual: '', novaSenha: '', confirmar: '' }); },
-    onError: (err) => toast.error(err.response?.data?.error || 'Erro ao alterar senha'),
+    onSuccess: () => { toast.success('Senha alterada com sucesso!'); setSenhas({ senhaAtual: '', novaSenha: '', confirmar: '' }); },
+    onError: (err) => {
+      const msg = err.response?.data?.error
+        || err.response?.data?.errors?.[0]?.msg
+        || err.response?.data?.message
+        || 'Erro ao alterar senha';
+      toast.error(msg);
+    },
   });
 
   const handleSenha = (e) => {
     e.preventDefault();
+    if (!senhas.senhaAtual) return toast.error('Informe a senha atual.');
     if (senhas.novaSenha !== senhas.confirmar) return toast.error('As senhas não coincidem.');
-    if (senhas.novaSenha.length < 6) return toast.error('Senha deve ter pelo menos 6 caracteres.');
+    if (senhas.novaSenha.length < 8) return toast.error('Nova senha deve ter no mínimo 8 caracteres.');
+    if (senhas.novaSenha === senhas.senhaAtual) return toast.error('A nova senha deve ser diferente da atual.');
     alterarSenha();
   };
 

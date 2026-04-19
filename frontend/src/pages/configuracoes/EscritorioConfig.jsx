@@ -7,6 +7,7 @@ const BASE_URL = 'http://localhost:3001';
 
 const camposConfig = [
   { key: 'nomeEscritorio',  label: 'Nome do Escritório',   placeholder: 'Ex: Silva & Associados Advocacia', icon: 'fa-building'     },
+  { key: 'lemaEscritorio',  label: 'Lema do Escritório',   placeholder: 'Ex: Advocacia & Consultoria Jurídica', icon: 'fa-quote-right' },
   { key: 'cnpj',            label: 'CNPJ',                 placeholder: '00.000.000/0001-00',               icon: 'fa-id-card'      },
   { key: 'oabEscritorio',   label: 'OAB do Escritório',    placeholder: 'OAB/SP 0000',                      icon: 'fa-gavel'        },
   { key: 'telefone',        label: 'Telefone',             placeholder: '(00) 00000-0000',                  icon: 'fa-phone'        },
@@ -34,6 +35,7 @@ export default function EscritorioConfig() {
       const initialForm = {};
       camposConfig.forEach(c => { initialForm[c.key] = data[c.key] || ''; });
       initialForm.rodapeDocumento = data.rodapeDocumento || '';
+      initialForm.corDocumento    = data.corDocumento    || '#1a2544';
       setForm(initialForm);
     }
   }, [data]);
@@ -194,6 +196,53 @@ export default function EscritorioConfig() {
           </div>
           <p className="text-xs mt-1.5" style={{ color: 'var(--text-muted)' }}>
             A logo aparecerá no cabeçalho dos documentos gerados em PDF.
+          </p>
+        </div>
+
+        {/* Cor do documento */}
+        <div>
+          <label className="flex items-center gap-2 text-xs font-semibold mb-2 uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
+            <i className="fas fa-palette text-[10px]" style={{ color: 'var(--accent)' }} />
+            Cor das bordas do documento
+          </label>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <input
+                type="color"
+                value={form.corDocumento || '#1a2544'}
+                onChange={e => setForm(f => ({ ...f, corDocumento: e.target.value }))}
+                style={{ width: 48, height: 48, borderRadius: 10, border: '2px solid var(--border)', cursor: 'pointer', padding: 2, background: 'transparent' }}
+              />
+            </div>
+            <div className="flex-1">
+              <input
+                className="input-base text-sm font-mono"
+                placeholder="#1a2544"
+                value={form.corDocumento || '#1a2544'}
+                onChange={e => {
+                  const v = e.target.value;
+                  if (/^#[0-9a-fA-F]{0,6}$/.test(v)) setForm(f => ({ ...f, corDocumento: v }));
+                }}
+              />
+            </div>
+            {/* Presets rápidos */}
+            <div className="flex gap-1.5">
+              {['#1a2544','#1a3a2a','#2a1a1a','#111111','#b8893d'].map(c => (
+                <button
+                  key={c}
+                  title={c}
+                  onClick={() => setForm(f => ({ ...f, corDocumento: c }))}
+                  style={{
+                    width: 22, height: 22, borderRadius: 6, background: c, cursor: 'pointer',
+                    border: form.corDocumento === c ? '2px solid var(--accent)' : '2px solid transparent',
+                    transition: 'border .15s',
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+          <p className="text-xs mt-1.5" style={{ color: 'var(--text-muted)' }}>
+            Cor utilizada nas bordas decorativas do cabeçalho e rodapé do PDF.
           </p>
         </div>
 

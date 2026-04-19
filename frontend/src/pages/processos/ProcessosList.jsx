@@ -217,7 +217,7 @@ function ProcessCard({ proc, index, onDelete }) {
 
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <p className="font-bold text-sm leading-tight truncate flex-1 group-hover:text-white transition-colors" style={{ maxWidth: temAtualizacao && novasMovimentacoes > 0 ? 'calc(100% - 70px)' : undefined }}>
+            <p className="font-bold text-sm leading-tight truncate flex-1 transition-colors" style={{ color: 'var(--text-primary)', maxWidth: temAtualizacao && novasMovimentacoes > 0 ? 'calc(100% - 70px)' : undefined }}>
               {nomeExibicao}
             </p>
             {/* Seta indicando que é clicável */}
@@ -346,11 +346,19 @@ export default function ProcessosList() {
   const [novoForm,     setNovoForm]     = useState(formVazio);
   const [deletando,    setDeletando]    = useState(null);
   const [showUpgrade,  setShowUpgrade]  = useState(false);
+  const [mostrarArquivados, setMostrarArquivados] = useState(false);
 
   /* ─── Queries / Mutations ─────────────────────── */
   const { data, isLoading } = useQuery({
-    queryKey: ['processos', busca, pagina],
-    queryFn: () => api.get('/processos', { params: { busca: busca || undefined, pagina, limite: 12 } }).then(r => r.data),
+    queryKey: ['processos', busca, pagina, mostrarArquivados],
+    queryFn: () => api.get('/processos', {
+      params: {
+        busca: busca || undefined,
+        pagina,
+        limite: 12,
+        apenasArquivados: mostrarArquivados ? 'true' : undefined,
+      }
+    }).then(r => r.data),
     keepPreviousData: true,
   });
 
@@ -411,8 +419,21 @@ export default function ProcessosList() {
           />
         </div>
         <div className="flex gap-2 ml-auto flex-shrink-0">
+          <button
+            onClick={() => { setMostrarArquivados(v => !v); setPagina(1); }}
+            className="btn btn-ghost"
+            style={mostrarArquivados ? {
+              background: 'rgba(201,168,76,.12)',
+              borderColor: 'rgba(201,168,76,.35)',
+              color: 'var(--accent)',
+            } : undefined}
+            title={mostrarArquivados ? 'Mostrar processos ativos' : 'Mostrar processos arquivados'}
+          >
+            <i className={mostrarArquivados ? 'fas fa-folder-open' : 'fas fa-box-archive'} />
+            {mostrarArquivados ? 'Voltar aos ativos' : 'Arquivados'}
+          </button>
           <button onClick={() => setShowVincular(true)} className="btn btn-ghost">
-            <i className="fas fa-link" /> Importar CNJ
+            <i className="fas fa-link" /> Importar Processo
           </button>
           <button onClick={() => setShowNovo(true)} className="btn btn-gold">
             <i className="fas fa-plus" /> Novo Processo
@@ -423,7 +444,9 @@ export default function ProcessosList() {
       {/* Contagem e Sincronização */}
       <div className="flex justify-between items-center" style={{ position: 'relative', zIndex: 1 }}>
         <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-          {isLoading ? 'Carregando...' : `${total} processo${total !== 1 ? 's' : ''} encontrado${total !== 1 ? 's' : ''}`}
+          {isLoading
+            ? 'Carregando...'
+            : `${total} processo${total !== 1 ? 's' : ''} ${mostrarArquivados ? 'arquivado' : 'encontrado'}${total !== 1 ? 's' : ''}`}
         </p>
         <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
           <i className="fas fa-rotate animate-spin-slow" />
@@ -444,22 +467,33 @@ export default function ProcessosList() {
             className="flex items-center justify-center rounded-3xl"
             style={{ width: 80, height: 80, background: 'var(--bg-card)', border: '1px solid var(--border)' }}
           >
-            <i className="fas fa-scale-balanced text-4xl" style={{ opacity: .3 }} />
+            <i className={`${mostrarArquivados ? 'fas fa-box-archive' : 'fas fa-scale-balanced'} text-4xl`} style={{ opacity: .3 }} />
           </div>
           <div className="text-center">
             <h3 className="text-lg font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>
-              Nenhum processo encontrado
+              {mostrarArquivados ? 'Nenhum processo arquivado' : 'Nenhum processo encontrado'}
             </h3>
-            <p className="text-sm">Crie seu primeiro processo ou importe via CNJ.</p>
+            <p className="text-sm">
+              {mostrarArquivados
+                ? 'Processos arquivados aparecerão aqui para você poder reativá-los.'
+                : 'Crie seu primeiro processo ou importe via CNJ.'}
+            </p>
           </div>
-          <div className="flex gap-3 mt-2">
-            <button onClick={() => setShowVincular(true)} className="btn btn-ghost">
-              <i className="fas fa-link" /> Importar CNJ
+          {!mostrarArquivados && (
+            <div className="flex gap-3 mt-2">
+              <button onClick={() => setShowVincular(true)} className="btn btn-ghost">
+                <i className="fas fa-link" /> Importar Processo
+              </button>
+              <button onClick={() => setShowNovo(true)} className="btn btn-gold">
+                <i className="fas fa-plus" /> Criar processo
+              </button>
+            </div>
+          )}
+          {mostrarArquivados && (
+            <button onClick={() => { setMostrarArquivados(false); setPagina(1); }} className="btn btn-ghost mt-2">
+              <i className="fas fa-folder-open" /> Voltar aos ativos
             </button>
-            <button onClick={() => setShowNovo(true)} className="btn btn-gold">
-              <i className="fas fa-plus" /> Criar processo
-            </button>
-          </div>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">

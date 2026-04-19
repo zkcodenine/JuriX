@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -6,12 +6,80 @@ import api from '../../services/api';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 
+// ── Preview ao vivo do papel timbrado ────────────────────────────
+function LetterheadPreview({ config = {}, logoUrl = '' }) {
+  const cor = (config.corDocumento && config.corDocumento.length === 7)
+    ? config.corDocumento : '#1a2544';
+
+  const hex = (c, a) => {
+    if (!c || c.length < 7) return `rgba(26,37,68,${a})`;
+    const r = parseInt(c.slice(1, 3), 16), g = parseInt(c.slice(3, 5), 16), b = parseInt(c.slice(5, 7), 16);
+    return `rgba(${r},${g},${b},${a})`;
+  };
+
+  const nomeEsc = config.nomeEscritorio || 'Seu Escritório';
+  const site    = config.site || config.website || 'seusite.com.br';
+
+  return (
+    <div style={{ position: 'relative', background: '#fff', border: '1px solid #ddd', borderRadius: 4, overflow: 'hidden', width: '100%', aspectRatio: '210/297' }}>
+      {/* Faixa esquerda */}
+      <div style={{ position: 'absolute', top: 0, left: 0, width: '4.3%', height: '14.3%', background: cor, clipPath: 'polygon(0 0,100% 0,60% 100%,0 100%)' }} />
+      <div style={{ position: 'absolute', top: '15.2%', left: 0, width: 0, height: 0, borderTop: '3.4% solid transparent', borderLeft: `3.4% solid ${cor}` }} />
+      {/* Triângulo superior-direito */}
+      <div style={{ position: 'absolute', top: 0, right: 0, width: '50%', height: '14.8%', background: cor, clipPath: 'polygon(100% 0,100% 100%,35% 100%,0 0)', zIndex: 2 }} />
+      <div style={{ position: 'absolute', top: 0, right: 0, width: '15.2%', height: '18.9%', background: hex(cor, 0.35), clipPath: 'polygon(100% 0,100% 100%,0 100%,55% 0)', zIndex: 1 }} />
+      <div style={{ position: 'absolute', top: '16.5%', right: '7.4%', width: '2.4%', height: '1.7%', borderRadius: '50%', background: cor, zIndex: 3 }} />
+
+      {/* Logo/nome dentro do triângulo */}
+      <div style={{ position: 'absolute', top: '2%', right: '7%', zIndex: 4, textAlign: 'right' }}>
+        {logoUrl
+          ? <img src={logoUrl} alt="logo" style={{ maxHeight: '6%', maxWidth: '16%', objectFit: 'contain', filter: 'brightness(0) invert(1)', display: 'block', marginLeft: 'auto' }} />
+          : <span style={{ fontSize: '2.4%', fontWeight: 'bold', color: '#fff', lineHeight: 1.2, display: 'block' }}>{nomeEsc.slice(0, 16)}</span>
+        }
+      </div>
+
+      {/* Data + info */}
+      <div style={{ paddingTop: '4%', paddingLeft: '4.8%', paddingRight: '4.8%' }}>
+        <div style={{ fontSize: '2%', color: '#888', marginBottom: '1.3%' }}>__ de ________ de ____</div>
+        <div style={{ fontSize: '2.2%', color: '#444', lineHeight: 1.5 }}>
+          {config.oabEscritorio && <div>OAB {config.oabEscritorio}</div>}
+          {config.telefone && <div>{config.telefone}</div>}
+          {config.email && <div>{config.email}</div>}
+        </div>
+      </div>
+
+      {/* Divisor */}
+      <div style={{ height: '0.13%', margin: '1.3% 4.8%', background: `linear-gradient(to right, ${cor}, ${hex(cor, 0.4)}, ${hex(cor, 0.1)})` }} />
+
+      {/* Corpo simulado */}
+      <div style={{ padding: '1.3% 4.8% 12% 4.8%' }}>
+        {[100, 88, 96, 72, 85, 60].map((w, i) => (
+          <div key={i} style={{ height: '1.3%', borderRadius: 2, background: '#e8e8e8', marginBottom: '1%', width: `${w}%` }} />
+        ))}
+        <div style={{ height: '2%' }} />
+        {[92, 100, 80].map((w, i) => (
+          <div key={i} style={{ height: '1.3%', borderRadius: 2, background: '#e8e8e8', marginBottom: '1%', width: `${w}%` }} />
+        ))}
+      </div>
+
+      {/* Rodapé */}
+      <div style={{ position: 'absolute', bottom: '6.1%', left: 0, width: 0, height: 0, borderTop: '4% solid transparent', borderLeft: `4.8% solid ${cor}` }} />
+      <div style={{ position: 'absolute', bottom: '4.7%', left: 0, width: 0, height: 0, borderTop: '2.4% solid transparent', borderLeft: `2.9% solid ${hex(cor, 0.4)}` }} />
+      <div style={{ position: 'absolute', bottom: '7.4%', right: '4.8%', width: '1.9%', height: '1.3%', borderRadius: '50%', background: cor }} />
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '4.7%', background: cor, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4.8%' }}>
+        <span style={{ fontSize: '2%', color: '#fff', fontWeight: 'bold' }}>{site}</span>
+        <span style={{ fontSize: '1.8%', color: 'rgba(255,255,255,.7)' }}>JuriX</span>
+      </div>
+    </div>
+  );
+}
+
 const quillModules = {
   toolbar: [
     [{ 'font': [] }],
     [{ 'size': ['small', false, 'large', 'huge'] }],
     ['bold', 'italic', 'underline'],
-    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+    [{ 'list': 'ordered' }, { 'list': 'bullet' }],
     [{ 'align': [] }],
     ['clean']
   ]
@@ -19,23 +87,23 @@ const quillModules = {
 
 const ensureHtml = (txt) => {
   if (!txt) return '';
-  if (txt.includes('<p>') || txt.includes('<br>')) return txt;
+  if (txt.includes('<p>') || txt.includes('<br>') || txt.includes('<div>')) return txt;
   return txt.split('\n').map(l => `<p>${l || '<br>'}</p>`).join('');
 };
 
 export const VARIAVEIS_MODELO = [
-  { tag: '{{escritorio_nome}}',   desc: 'Nome do escritório'    },
-  { tag: '{{escritorio_oab}}',    desc: 'OAB do escritório'     },
-  { tag: '{{escritorio_email}}',  desc: 'E-mail do escritório'  },
-  { tag: '{{escritorio_tel}}',    desc: 'Telefone do escritório' },
-  { tag: '{{cliente_nome}}',      desc: 'Nome do cliente'       },
-  { tag: '{{processo_numero}}',   desc: 'Número do processo'    },
-  { tag: '{{processo_vara}}',     desc: 'Vara / Tribunal'       },
-  { tag: '{{processo_classe}}',   desc: 'Classe processual'     },
-  { tag: '{{advogado_nome}}',     desc: 'Nome do advogado'      },
-  { tag: '{{advogado_oab}}',      desc: 'OAB do advogado'       },
-  { tag: '{{data_hoje}}',         desc: 'Data de hoje'          },
-  { tag: '{{cidade}}',            desc: 'Cidade do escritório'  },
+  { tag: '{{escritorio_nome}}',   desc: 'Nome do escritório'     },
+  { tag: '{{escritorio_oab}}',    desc: 'OAB do escritório'      },
+  { tag: '{{escritorio_email}}',  desc: 'E-mail do escritório'   },
+  { tag: '{{escritorio_tel}}',    desc: 'Telefone do escritório'  },
+  { tag: '{{cliente_nome}}',      desc: 'Nome do cliente'        },
+  { tag: '{{processo_numero}}',   desc: 'Número do processo'     },
+  { tag: '{{processo_vara}}',     desc: 'Vara / Tribunal'        },
+  { tag: '{{processo_classe}}',   desc: 'Classe processual'      },
+  { tag: '{{advogado_nome}}',     desc: 'Nome do advogado'       },
+  { tag: '{{advogado_oab}}',      desc: 'OAB do advogado'        },
+  { tag: '{{data_hoje}}',         desc: 'Data de hoje'           },
+  { tag: '{{cidade}}',            desc: 'Cidade do escritório'   },
 ];
 
 const EXEMPLOS = [
@@ -101,6 +169,7 @@ Contratante                            Contratado — OAB {{advogado_oab}}`,
   },
 ];
 
+// ── ModeloCard ───────────────────────────────────────────────────
 function ModeloCard({ modelo, onEdit, onDelete, onGerar }) {
   return (
     <div className="card card-hover card-glow group animate-fadeIn" style={{ cursor: 'default' }}>
@@ -143,6 +212,7 @@ function ModeloCard({ modelo, onEdit, onDelete, onGerar }) {
   );
 }
 
+// ── ModeloForm (criar / editar) ──────────────────────────────────
 function ModeloForm({ modelo, onClose, onSaved }) {
   const qc = useQueryClient();
   const [form, setForm] = useState({
@@ -151,6 +221,16 @@ function ModeloForm({ modelo, onClose, onSaved }) {
     conteudo:  ensureHtml(modelo?.conteudo || ''),
   });
   const [showVars, setShowVars] = useState(false);
+
+  const { data: config = {} } = useQuery({
+    queryKey: ['configuracoes-escritorio'],
+    queryFn: () => api.get('/configuracoes/escritorio').then(r => r.data),
+    staleTime: 60000,
+  });
+
+  const logoUrl = config.logoEscritorio
+    ? `${window.location.port === '3000' ? window.location.origin.replace(':3000', ':3001') : window.location.origin}${config.logoEscritorio}`
+    : '';
 
   const { mutate, isPending } = useMutation({
     mutationFn: () => modelo?.id
@@ -225,7 +305,7 @@ function ModeloForm({ modelo, onClose, onSaved }) {
                 onClick={() => setShowVars(v => !v)}
                 className="btn btn-ghost text-xs py-1 px-3"
               >
-                <i className={`fas fa-tag text-[10px] mr-1`} style={{ color: 'var(--accent)' }} />
+                <i className="fas fa-tag text-[10px] mr-1" style={{ color: 'var(--accent)' }} />
                 {showVars ? 'Ocultar variáveis' : 'Inserir variável'}
               </button>
             </div>
@@ -247,14 +327,34 @@ function ModeloForm({ modelo, onClose, onSaved }) {
               </div>
             )}
 
-            <div className="ql-themed rounded-lg overflow-hidden" style={{ minHeight: 500 }}>
-              <ReactQuill
-                theme="snow"
-                value={form.conteudo}
-                onChange={val => setForm(f => ({ ...f, conteudo: val }))}
-                modules={quillModules}
-                style={{ height: 458 }}
-              />
+            {/* Editor + Preview lado a lado */}
+            <div className="flex gap-4 items-start">
+              {/* Preview do papel timbrado */}
+              <div className="flex-shrink-0" style={{ width: 140 }}>
+                <p className="text-[10px] font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--accent)' }}>
+                  <i className="fas fa-eye mr-1" />Prévia PDF
+                </p>
+                <LetterheadPreview config={config} logoUrl={logoUrl} />
+                <div className="mt-2 space-y-1">
+                  <p className="text-[9px]" style={{ color: 'var(--text-muted)' }}>
+                    Cor: <span className="font-mono font-bold" style={{ color: config.corDocumento || '#1a2544' }}>{config.corDocumento || '#1a2544'}</span>
+                  </p>
+                  <p className="text-[9px] italic" style={{ color: 'var(--text-muted)' }}>Altere em Dados do Escritório</p>
+                </div>
+              </div>
+
+              {/* Quill editor */}
+              <div className="flex-1 min-w-0">
+                <div className="ql-themed rounded-lg overflow-hidden" style={{ minHeight: 500 }}>
+                  <ReactQuill
+                    theme="snow"
+                    value={form.conteudo}
+                    onChange={val => setForm(f => ({ ...f, conteudo: val }))}
+                    modules={quillModules}
+                    style={{ height: 458 }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -277,24 +377,25 @@ function ModeloForm({ modelo, onClose, onSaved }) {
   );
 }
 
+// ── GerarDocumentoModal ──────────────────────────────────────────
 export function GerarDocumentoModal({ modelo, processoPreSelecionado, onClose }) {
   const [processoId, setProcessoId] = useState(processoPreSelecionado?.id || '');
-  const [gerado, setGerado] = useState('');
+  // Template carregado imediatamente — sem tela de espera
+  const [gerado, setGerado] = useState(ensureHtml(modelo.conteudo));
   const [clienteNomeState, setClienteNomeState] = useState('');
   const [notaIdGerada, setNotaIdGerada] = useState(null);
+  const [preenchendo, setPreenchendo] = useState(false);
+  const filledRef = useRef(false);
   const qc = useQueryClient();
 
   const notaSalvaMutation = useMutation({
-    mutationFn: ({ processoId, titulo, conteudo }) => {
-      if (notaIdGerada) {
-        return api.put(`/processos/${processoId}/anotacoes/${notaIdGerada}`, { titulo, conteudo });
-      }
-      return api.post(`/processos/${processoId}/anotacoes`, { titulo, conteudo });
-    },
+    mutationFn: ({ processoId: pid, titulo, conteudo }) =>
+      notaIdGerada
+        ? api.put(`/processos/${pid}/anotacoes/${notaIdGerada}`, { titulo, conteudo })
+        : api.post(`/processos/${pid}/anotacoes`, { titulo, conteudo }),
     onSuccess: (res) => {
       if (res?.data?.id) setNotaIdGerada(res.data.id);
       qc.invalidateQueries(['processo']);
-      toast.success('Documento gerado e anexado ao processo!');
     }
   });
 
@@ -309,7 +410,11 @@ export function GerarDocumentoModal({ modelo, processoPreSelecionado, onClose })
     queryFn: () => api.get('/configuracoes/escritorio').then(r => r.data),
   });
 
-  const gerar = async () => {
+  // Preenche variáveis com dados do escritório + processo opcional
+  const preencher = async (idProcesso) => {
+    const idParaUsar = idProcesso !== undefined ? idProcesso : (processoPreSelecionado?.id || processoId || '');
+    setPreenchendo(true);
+
     let conteudo = modelo.conteudo;
     const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
@@ -321,17 +426,15 @@ export function GerarDocumentoModal({ modelo, processoPreSelecionado, onClose })
       .replace(/\{\{cidade\}\}/g,           config.cidade         || '')
       .replace(/\{\{data_hoje\}\}/g,        hoje);
 
-    let tempClientName = clienteNomeState;
-    const idParaUsar = processoPreSelecionado?.id || processoId;
+    let tempClientName = '';
+
     if (idParaUsar) {
       try {
         const proc = processoPreSelecionado || (await api.get(`/processos/${idParaUsar}`)).data;
         const cliente = proc.partes?.find(p => p.tipo === 'AUTOR') || proc.partes?.[0];
-        if (cliente) {
-           setClienteNomeState(cliente.nome);
-           tempClientName = cliente.nome;
-        }
         const adv     = proc.advogados?.[0];
+        if (cliente) { setClienteNomeState(cliente.nome); tempClientName = cliente.nome; }
+
         conteudo = conteudo
           .replace(/\{\{cliente_nome\}\}/g,   cliente?.nome   || '')
           .replace(/\{\{processo_numero\}\}/g, proc.numeroCnj  || proc.numero || '')
@@ -339,152 +442,43 @@ export function GerarDocumentoModal({ modelo, processoPreSelecionado, onClose })
           .replace(/\{\{processo_classe\}\}/g, proc.classe     || '')
           .replace(/\{\{advogado_nome\}\}/g,   adv?.nome       || '')
           .replace(/\{\{advogado_oab\}\}/g,    adv?.oab        || '');
+
+        const cleanClient = tempClientName.replace(/[^a-zA-Z0-9 -]/g, '').trim();
+        const titulo = cleanClient ? `${modelo.nome} - ${cleanClient}` : modelo.nome;
+        notaSalvaMutation.mutate({ processoId: idParaUsar, titulo: `${titulo}\u200B`, conteudo: ensureHtml(conteudo) });
       } catch {
         toast.error('Erro ao carregar dados do processo.');
-        return;
       }
     }
+
     setGerado(ensureHtml(conteudo));
-    
-    if (idParaUsar) {
-      const cleanClientName = tempClientName ? tempClientName.replace(/[^a-zA-Z0-9 -]/g, '').trim() : '';
-      const tituloDocs = cleanClientName ? `${modelo.nome} - ${cleanClientName}` : modelo.nome;
-      
-      notaSalvaMutation.mutate({
-        processoId: idParaUsar,
-        titulo: `${tituloDocs}\u200B`,
-        conteudo: ensureHtml(conteudo)
-      });
-    }
+    setPreenchendo(false);
+  };
+
+  // Preenche automaticamente com dados do escritório quando config carrega (uma vez)
+  useEffect(() => {
+    if (filledRef.current || !config || !Object.keys(config).length) return;
+    filledRef.current = true;
+    preencher(processoPreSelecionado?.id || '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config]);
+
+  const exportarPDF = async () => {
+    const { exportarPDFComCabecalho } = await import('../../utils/pdfExport');
+    const cleanModelName = modelo.nome.replace(/[^a-zA-Z0-9 -]/g, '').trim();
+    const cleanClientName = clienteNomeState ? clienteNomeState.replace(/[^a-zA-Z0-9 -]/g, '').trim() : '';
+    const filename = cleanClientName ? `${cleanModelName} - ${cleanClientName}` : cleanModelName;
+    await exportarPDFComCabecalho(gerado, filename, { toast });
   };
 
   const copiar = () => {
-    navigator.clipboard.writeText(gerado);
+    navigator.clipboard.writeText(gerado.replace(/<[^>]+>/g, ''));
     toast.success('Copiado para a área de transferência!');
   };
 
-  const exportarPDF = async () => {
-    const html2pdf = (await import('html2pdf.js')).default;
-    const baseUrl = window.location.origin.replace(':3000', ':3001');
-
-    // Convert logo to base64 so html2canvas can render it (avoids CORS issues)
-    let logoDataUrl = '';
-    if (config.logoEscritorio) {
-      try {
-        const resp = await fetch(`${baseUrl}${config.logoEscritorio}`);
-        const blob = await resp.blob();
-        logoDataUrl = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result);
-          reader.readAsDataURL(blob);
-        });
-      } catch {
-        // Fallback: use URL directly (may not render in PDF)
-        logoDataUrl = `${baseUrl}${config.logoEscritorio}`;
-      }
-    }
-
-    const nomeEsc = config.nomeEscritorio || '';
-    const oab = config.oabEscritorio || '';
-    const cnpjRaw = config.cnpj || config.cpf || '';
-    const endereco = config.endereco || '';
-    const cidade = config.cidade || '';
-    const telefoneRaw = config.telefone || '';
-    const email = config.email || '';
-    const site = config.site || config.website || '';
-
-    // Máscara de CPF/CNPJ
-    const formatCpfCnpj = (v) => {
-      const digits = v.replace(/\D/g, '');
-      if (digits.length <= 11) {
-        // CPF: 000.000.000-00
-        return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-      }
-      // CNPJ: 00.000.000/0000-00
-      return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
-    };
-
-    // Máscara de telefone
-    const formatTelefone = (v) => {
-      const digits = v.replace(/\D/g, '');
-      if (digits.length === 11) {
-        // Celular: (00) 00000-0000
-        return digits.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
-      }
-      if (digits.length === 10) {
-        // Fixo: (00) 0000-0000
-        return digits.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
-      }
-      return v;
-    };
-
-    const cnpjFormatted = cnpjRaw ? formatCpfCnpj(cnpjRaw) : '';
-    const cnpjLabel = cnpjRaw && cnpjRaw.replace(/\D/g, '').length <= 11 ? 'CPF' : 'CNPJ';
-    const telefoneFormatted = telefoneRaw ? formatTelefone(telefoneRaw) : '';
-
-    // Linhas do cabeçalho: uma por linha
-    const headerLines = [];
-    if (oab) headerLines.push(`OAB ${oab}`);
-    if (cnpjFormatted) headerLines.push(`${cnpjLabel}: ${cnpjFormatted}`);
-    if (telefoneFormatted) headerLines.push(telefoneFormatted);
-    if (email) headerLines.push(email);
-
-    const headerHtml = `
-      <div style="border-bottom: 1.5px solid #111; padding-bottom: 6px; margin-bottom: 22px; text-align: center;">
-        ${logoDataUrl ? `<img src="${logoDataUrl}" style="max-height:56px; max-width:110px; object-fit:contain; display:block; margin: 0 auto 4px auto;" crossorigin="anonymous" />` : ''}
-        ${nomeEsc ? `<div style="font-size:13pt; font-weight:bold; text-transform:uppercase; margin-bottom:3px; letter-spacing:0.5px;">${nomeEsc}</div>` : ''}
-        ${headerLines.map(line => `<div style="font-size:8.5pt; color:#444; line-height:1.4;">${line}</div>`).join('')}
-      </div>
-    `;
-
-    const infosFooter = [];
-    if (endereco) infosFooter.push(endereco + (cidade ? ` — ${cidade}` : ''));
-    if (telefoneFormatted) infosFooter.push(`Contato: ${telefoneFormatted}`);
-    if (email) infosFooter.push(`E-mail: ${email}`);
-    if (site) infosFooter.push(`Site: ${site}`);
-
-    const element = document.createElement('div');
-    element.innerHTML = `
-      <div style="font-family: 'Times New Roman', Times, serif; color: #000; font-size: 12pt; padding: 12px 40px 25px 40px; line-height: 1.6; text-align: justify;">
-        ${headerHtml}
-        ${gerado}
-      </div>
-    `;
-
-    const cleanModelName = modelo.nome.replace(/[^a-zA-Z0-9 -]/g, '').trim();
-    const cleanClientName = clienteNomeState ? clienteNomeState.replace(/[^a-zA-Z0-9 -]/g, '').trim() : '';
-    const filename = cleanClientName ? `${cleanModelName} - ${cleanClientName}.pdf` : `${cleanModelName}.pdf`;
-
-    const opt = {
-      margin:       [10, 0, 25, 0], // top, left, bottom, right
-      filename:     filename,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, useCORS: true },
-      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
-
-    toast.loading('Gerando PDF...', { id: 'pdf-toast' });
-
-    html2pdf().from(element).set(opt).toPdf().get('pdf').then(function (pdf) {
-      if (infosFooter.length > 0) {
-        const totalPages = pdf.internal.getNumberOfPages();
-        const footerText = infosFooter.join(' • ');
-        
-        for (let i = 1; i <= totalPages; i++) {
-          pdf.setPage(i);
-          pdf.setFont('times', 'normal');
-          pdf.setFontSize(8);
-          pdf.setTextColor(80);
-          
-          // Desenha a linha e texto no final da página fisicamente usando JS puro de PDF
-          pdf.setDrawColor(150);
-          pdf.line(20, pdf.internal.pageSize.getHeight() - 15, pdf.internal.pageSize.getWidth() - 20, pdf.internal.pageSize.getHeight() - 15);
-          pdf.text(footerText, pdf.internal.pageSize.getWidth() / 2, pdf.internal.pageSize.getHeight() - 10, { align: 'center' });
-        }
-      }
-      toast.success('Arquivo PDF baixado!', { id: 'pdf-toast' });
-    }).save();
-  };
+  const logoUrl = config.logoEscritorio
+    ? `${window.location.port === '3000' ? window.location.origin.replace(':3000', ':3001') : window.location.origin}${config.logoEscritorio}`
+    : '';
 
   return createPortal(
     <div
@@ -495,6 +489,7 @@ export function GerarDocumentoModal({ modelo, processoPreSelecionado, onClose })
         className="w-full max-w-5xl rounded-2xl animate-scaleIn my-8"
         style={{ background: 'var(--glass-bg, rgba(10,17,40,.92))', backdropFilter: 'blur(24px) saturate(1.3)', WebkitBackdropFilter: 'blur(24px) saturate(1.3)', border: '1px solid rgba(255,255,255,.1)' }}
       >
+        {/* Header */}
         <div className="flex justify-between items-center px-6 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,.08)' }}>
           <div>
             <h3 className="text-base font-bold">Gerar Documento</h3>
@@ -505,66 +500,104 @@ export function GerarDocumentoModal({ modelo, processoPreSelecionado, onClose })
           </button>
         </div>
 
-        <div className="p-6 space-y-5">
-          {!processoPreSelecionado && (
-            <div>
-              <label className="block text-xs font-semibold mb-2 uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-                Vincular processo (opcional)
-              </label>
-              <select
-                className="input-base"
-                value={processoId}
-                onChange={e => { setProcessoId(e.target.value); setGerado(''); }}
+        <div className="p-6 space-y-4">
+          {/* Seletor de processo / processo vinculado */}
+          {!processoPreSelecionado ? (
+            <div className="flex items-end gap-3">
+              <div className="flex-1">
+                <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
+                  Vincular processo (opcional)
+                </label>
+                <select
+                  className="input-base"
+                  value={processoId}
+                  onChange={e => setProcessoId(e.target.value)}
+                >
+                  <option value="">Nenhum — apenas dados do escritório</option>
+                  {processos.map(p => {
+                    const cliente = p.partes?.find(x => x.tipo === 'AUTOR') || p.partes?.[0];
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {cliente?.nome || '—'} — {p.numeroCnj || p.numero}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+              <button
+                onClick={() => preencher(processoId)}
+                disabled={preenchendo}
+                className="btn btn-gold flex-shrink-0"
               >
-                <option value="">Nenhum — apenas dados do escritório</option>
-                {processos.map(p => {
-                  const cliente = p.partes?.find(x => x.tipo === 'AUTOR') || p.partes?.[0];
-                  return (
-                    <option key={p.id} value={p.id}>
-                      {cliente?.nome || '—'} — {p.numeroCnj || p.numero}
-                    </option>
-                  );
-                })}
-              </select>
+                {preenchendo ? <span className="spinner" /> : <i className="fas fa-wand-magic-sparkles" />}
+                Preencher dados
+              </button>
             </div>
-          )}
-
-          {processoPreSelecionado && (
-            <div
-              className="flex items-center gap-3 px-4 py-3 rounded-xl"
-              style={{ background: 'rgba(201,168,76,.06)', border: '1px solid rgba(201,168,76,.15)' }}
-            >
+          ) : (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl"
+              style={{ background: 'rgba(201,168,76,.06)', border: '1px solid rgba(201,168,76,.15)' }}>
               <i className="fas fa-scale-balanced text-sm" style={{ color: 'var(--accent)' }} />
-              <div>
+              <div className="flex-1">
                 <p className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>Processo vinculado</p>
                 <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
                   {processoPreSelecionado.numeroCnj || processoPreSelecionado.numero}
                 </p>
               </div>
+              <button
+                onClick={() => preencher(processoPreSelecionado.id)}
+                disabled={preenchendo}
+                className="btn btn-ghost text-xs"
+              >
+                {preenchendo ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <i className="fas fa-rotate" />}
+                Repreencher
+              </button>
             </div>
           )}
 
-          {!gerado ? (
-            <div className="flex flex-col items-center py-10 gap-3" style={{ color: 'var(--text-muted)' }}>
-              <i className="fas fa-wand-magic-sparkles text-4xl" style={{ opacity: .3 }} />
-              <p className="text-sm">Clique em "Gerar Documento" para preencher automaticamente</p>
-            </div>
-          ) : (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-                  Documento gerado
-                </label>
-                <div className="flex gap-2">
-                  <button onClick={copiar} className="btn btn-ghost text-xs py-1.5 px-3">
-                    <i className="fas fa-copy" /> Copiar
-                  </button>
-                  <button onClick={exportarPDF} className="btn btn-gold text-xs py-1.5 px-3">
-                    <i className="fas fa-download" /> Exportar para PDF
-                  </button>
+          {/* Editor + Preview lado a lado */}
+          <div className="flex gap-4 items-start">
+            {/* Preview */}
+            <div className="flex-shrink-0" style={{ width: 148 }}>
+              <p className="text-[10px] font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--accent)' }}>
+                <i className="fas fa-eye mr-1" />Prévia do PDF
+              </p>
+              <LetterheadPreview config={config} logoUrl={logoUrl} />
+              <div className="mt-2 space-y-1">
+                <p className="text-[9px]" style={{ color: 'var(--text-muted)' }}>
+                  Cor das bordas:{' '}
+                  <span className="font-mono font-bold" style={{ color: config.corDocumento || '#1a2544' }}>
+                    {config.corDocumento || '#1a2544'}
+                  </span>
+                </p>
+                <p className="text-[9px] italic" style={{ color: 'var(--text-muted)' }}>Altere em Dados do Escritório</p>
+                <div className="flex items-center gap-1 mt-1">
+                  <i className="fas fa-check-circle text-[8px]" style={{ color: 'var(--accent)' }} />
+                  <span className="text-[8px]" style={{ color: 'var(--text-muted)' }}>Cabeçalho + bordas decorativas</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <i className="fas fa-check-circle text-[8px]" style={{ color: 'var(--accent)' }} />
+                  <span className="text-[8px]" style={{ color: 'var(--text-muted)' }}>Rodapé com barra e site</span>
                 </div>
               </div>
-              <div className="ql-themed rounded-lg overflow-hidden mt-3" style={{ minHeight: 500 }}>
+            </div>
+
+            {/* Quill editor */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
+                  Conteúdo do documento
+                  {preenchendo && (
+                    <span className="ml-2 text-[10px] font-normal" style={{ color: 'var(--accent)' }}>
+                      <span className="spinner inline-block mr-1" style={{ width: 10, height: 10 }} />
+                      Preenchendo...
+                    </span>
+                  )}
+                </label>
+                <button onClick={copiar} className="btn btn-ghost text-xs py-1 px-2">
+                  <i className="fas fa-copy text-[10px]" /> Copiar texto
+                </button>
+              </div>
+              <div className="ql-themed rounded-lg overflow-hidden" style={{ minHeight: 500 }}>
                 <ReactQuill
                   theme="snow"
                   value={gerado}
@@ -574,13 +607,13 @@ export function GerarDocumentoModal({ modelo, processoPreSelecionado, onClose })
                 />
               </div>
             </div>
-          )}
+          </div>
         </div>
 
         <div className="px-6 py-4 flex gap-3 justify-end" style={{ borderTop: '1px solid rgba(255,255,255,.07)' }}>
           <button onClick={onClose} className="btn btn-ghost">Fechar</button>
-          <button onClick={gerar} className="btn btn-gold">
-            <i className="fas fa-wand-magic-sparkles" /> Gerar Documento
+          <button onClick={exportarPDF} className="btn btn-gold">
+            <i className="fas fa-download" /> Baixar PDF
           </button>
         </div>
       </div>
@@ -589,6 +622,7 @@ export function GerarDocumentoModal({ modelo, processoPreSelecionado, onClose })
   );
 }
 
+// ── Página principal ─────────────────────────────────────────────
 export default function ModelosDocumentos() {
   const qc = useQueryClient();
   const [editando, setEditando] = useState(null);

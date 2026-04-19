@@ -37,22 +37,29 @@ function OrigemBadge({ origem }) {
   );
 }
 
+const PAGE_SIZE = 50;
+
 export default function TabMovimentacoes({ processo }) {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ data: '', descricao: '', tipo: '' });
   const [filtroOrigem, setFiltroOrigem] = useState('todas');
+  const [pagina, setPagina] = useState(1);
   const qc = useQueryClient();
 
   const { data: movData, isLoading: loadingMovs } = useQuery({
-    queryKey: ['movimentacoes', processo.id],
-    queryFn: () => api.get(`/processos/${processo.id}/movimentacoes?limite=9999`).then(r => r.data),
+    queryKey: ['movimentacoes', processo.id, pagina],
+    queryFn: () => api.get(`/processos/${processo.id}/movimentacoes?pagina=${pagina}&limite=${PAGE_SIZE}`).then(r => r.data),
   });
+
+  const invalidateMovs = () => {
+    qc.invalidateQueries({ queryKey: ['movimentacoes', processo.id] });
+    qc.invalidateQueries({ queryKey: ['processo', processo.id] });
+  };
 
   const deleteMutation = useMutation({
     mutationFn: (movId) => api.delete(`/processos/${processo.id}/movimentacoes/${movId}`),
     onSuccess: () => {
-      qc.invalidateQueries(['movimentacoes', processo.id]);
-      qc.invalidateQueries(['processo', processo.id]);
+      invalidateMovs();
       toast.success('Movimentacao excluida!');
     },
     onError: () => toast.error('Erro ao excluir movimentacao'),
@@ -64,11 +71,11 @@ export default function TabMovimentacoes({ processo }) {
       data: form.data || new Date().toISOString(),
     }),
     onSuccess: () => {
-      qc.invalidateQueries(['movimentacoes', processo.id]);
-      qc.invalidateQueries(['processo', processo.id]);
+      invalidateMovs();
       toast.success('Movimentacao adicionada!');
       setShowAdd(false);
       setForm({ data: '', descricao: '', tipo: '' });
+      setPagina(1);
     },
     onError: () => toast.error('Erro ao adicionar movimentacao'),
   });
@@ -77,8 +84,7 @@ export default function TabMovimentacoes({ processo }) {
   const syncMutation = useMutation({
     mutationFn: () => api.post(`/processos/${processo.id}/sincronizar`, {}, { timeout: 120000 }),
     onSuccess: (res) => {
-      qc.invalidateQueries(['movimentacoes', processo.id]);
-      qc.invalidateQueries(['processo', processo.id]);
+      invalidateMovs();
       qc.invalidateQueries(['dashboard']);
       const d = res.data;
       toast.success(
@@ -91,6 +97,7 @@ export default function TabMovimentacoes({ processo }) {
 
   const allMovs = [...(movData?.items || [])].sort((a, b) => new Date(b.data) - new Date(a.data));
   const totalReal = movData?.total ?? processo._count?.movimentacoes ?? 0;
+  const totalPaginas = Math.ceil(totalReal / PAGE_SIZE);
 
   // Mark as viewed: save timestamp to localStorage when tab is opened
   const viewedKey = `mov_viewed_${processo.id}`;
@@ -109,6 +116,8 @@ export default function TabMovimentacoes({ processo }) {
       qc.invalidateQueries({ queryKey: ['processos-alertas'] });
     };
   }, [viewedKey, qc, processo.id]);
+
+  const setFiltro = (f) => { setFiltroOrigem(f); setPagina(1); };
 
   // Filtro por origem
   const movs = filtroOrigem === 'todas'
@@ -180,7 +189,7 @@ export default function TabMovimentacoes({ processo }) {
               Filtrar:
             </span>
             <button
-              onClick={() => setFiltroOrigem('todas')}
+              onClick={() => setFiltro('todas')}
               className="text-[10px] font-bold px-2.5 py-1 rounded-full transition-all"
               style={{
                 background: filtroOrigem === 'todas' ? 'var(--accent-light)' : 'transparent',
@@ -196,7 +205,7 @@ export default function TabMovimentacoes({ processo }) {
               return (
                 <button
                   key={origem}
-                  onClick={() => setFiltroOrigem(origem)}
+                  onClick={() => setFiltro(origem)}
                   className="text-[10px] font-bold px-2.5 py-1 rounded-full transition-all inline-flex items-center gap-1"
                   style={{
                     background: isActive ? c.bg : 'transparent',
@@ -262,6 +271,7 @@ export default function TabMovimentacoes({ processo }) {
 
           <div className="space-y-0">
             {movs.map((mov, i) => {
+
               const { icon, color } = tipoIcon(mov.tipo || mov.descricao);
               const isApi = mov.origemApi === 'datajud' || mov.origemApi === 'tjmg';
               const movTime = new Date(mov.data).getTime();
@@ -335,6 +345,50 @@ export default function TabMovimentacoes({ processo }) {
               );
             })}
           </div>
+
+          {/* Paginação */}
+          {totalPaginas > 1 && (
+            <div className="flex items-center justify-between pt-4 mt-4" style={{ borderTop: '1px solid var(--border)' }}>
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                Pág. {pagina} de {totalPaginas} · {totalReal} movimentações
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPagina(p => Math.max(1, p - 1))}
+                  disabled={pagina === 1}
+                  className="btn btn-ghost text-xs py-1.5 px-3"
+                >
+                  <i className="fas fa-chevron-left" />
+                </button>
+                {Array.from({ length: Math.min(5, totalPaginas) }, (_, i) => {
+                  const start = Math.max(1, Math.min(pagina - 2, totalPaginas - 4));
+                  const p = start + i;
+                  if (p > totalPaginas) return null;
+                  return (
+                    <button
+                      key={p}
+                      onClick={() => setPagina(p)}
+                      className="text-xs font-bold px-2.5 py-1 rounded-lg transition-all"
+                      style={{
+                        background: pagina === p ? 'var(--accent-light)' : 'transparent',
+                        color: pagina === p ? 'var(--accent)' : 'var(--text-muted)',
+                        border: `1px solid ${pagina === p ? 'var(--accent-border)' : 'var(--border)'}`,
+                      }}
+                    >
+                      {p}
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}
+                  disabled={pagina === totalPaginas}
+                  className="btn btn-ghost text-xs py-1.5 px-3"
+                >
+                  <i className="fas fa-chevron-right" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

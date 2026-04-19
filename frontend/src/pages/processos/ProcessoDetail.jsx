@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -52,6 +52,32 @@ export default function ProcessoDetail() {
   const [editForm,      setEditForm]      = useState(null);
   const [showDelete,    setShowDelete]    = useState(false);
   const [showInfoExtra, setShowInfoExtra] = useState(false);
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
+  const [showConfirmArquivar, setShowConfirmArquivar] = useState(false);
+  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
+  const actionsBtnRef = useRef(null);
+
+  // Fecha o menu de ações ao clicar fora ou rolar a página
+  useEffect(() => {
+    if (!showActionsMenu) return;
+    const close = () => setShowActionsMenu(false);
+    document.addEventListener('mousedown', close);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [showActionsMenu]);
+
+  const openActionsMenu = () => {
+    if (!actionsBtnRef.current) return;
+    const rect = actionsBtnRef.current.getBoundingClientRect();
+    setMenuPos({
+      top: rect.bottom + 6,
+      right: window.innerWidth - rect.right,
+    });
+    setShowActionsMenu(v => !v);
+  };
 
   const { data: processo, isLoading } = useQuery({
     queryKey: ['processo', id],
@@ -66,6 +92,26 @@ export default function ProcessoDetail() {
       navigate('/processos');
     },
     onError: () => toast.error('Erro ao excluir processo.'),
+  });
+
+  const arquivarMutation = useMutation({
+    mutationFn: () => api.put(`/processos/${id}`, { status: 'ARQUIVADO' }),
+    onSuccess: () => {
+      qc.invalidateQueries(['processo', id]);
+      qc.invalidateQueries(['processos']);
+      toast.success('Processo arquivado.');
+    },
+    onError: () => toast.error('Erro ao arquivar processo.'),
+  });
+
+  const restaurarMutation = useMutation({
+    mutationFn: () => api.put(`/processos/${id}`, { status: 'ATIVO' }),
+    onSuccess: () => {
+      qc.invalidateQueries(['processo', id]);
+      qc.invalidateQueries(['processos']);
+      toast.success('Processo reativado.');
+    },
+    onError: () => toast.error('Erro ao reativar processo.'),
   });
 
   const monitorarMutation = useMutation({
@@ -165,7 +211,7 @@ export default function ProcessoDetail() {
       </button>
 
       {/* ─── Header do processo ──────────────────── */}
-      <div className="card">
+      <div className="card" style={{ position: 'relative', zIndex: 30 }}>
         <div className="flex items-start gap-4 flex-wrap">
           <div
             className="rounded-2xl flex items-center justify-center font-bold text-2xl flex-shrink-0"
@@ -233,12 +279,30 @@ export default function ProcessoDetail() {
             </div>
           ))}
           <div className="ml-auto flex gap-2">
-            {!processo.numeroCnj && (
+            {/* Vincular CNJ: só para processos manuais que ainda não foram vinculados */}
+            {!processo.numeroCnj && processo.origemDados !== 'datajud' && (
               <button onClick={() => setShowVincular(true)} className="btn btn-ghost text-xs py-1.5 px-3">
                 <i className="fas fa-link text-[11px]" /> Vincular CNJ
               </button>
             )}
-            {processo.numeroCnj && (
+            {/* Processos importados via CNJ: monitoramento é sempre ativo — mostra indicador fixo */}
+            {processo.numeroCnj && processo.origemDados === 'datajud' && (
+              <div
+                className="flex items-center gap-1.5 text-xs py-1.5 px-3 rounded-xl"
+                style={{
+                  background: 'rgba(201,168,76,.1)',
+                  border: '1px solid rgba(201,168,76,.25)',
+                  color: 'var(--accent)',
+                }}
+                title="Processos importados do CNJ são monitorados automaticamente e não podem ter o monitoramento desativado."
+              >
+                <i className="fas fa-satellite-dish text-[11px]" />
+                <span className="font-medium">Monitorado (CNJ)</span>
+                <i className="fas fa-lock text-[9px] ml-0.5" style={{ opacity: .6 }} />
+              </div>
+            )}
+            {/* Processo manual mas com CNJ vinculado: toggle mantido */}
+            {processo.numeroCnj && processo.origemDados !== 'datajud' && (
               <button
                 onClick={() => monitorarMutation.mutate(!processo.monitoramentoAtivo)}
                 disabled={monitorarMutation.isPending}
@@ -248,30 +312,41 @@ export default function ProcessoDetail() {
                 {processo.monitoramentoAtivo ? 'Desativar monitor' : 'Monitoramento'}
               </button>
             )}
-            <button
-              onClick={() => setShowInfoExtra(true)}
-              className="btn btn-ghost text-xs py-1.5 px-3"
-              title="Ver dados do processo"
-            >
-              <i className="fas fa-eye text-[11px]" />
-            </button>
-            {processo.status !== 'CONCLUIDO' && (
-              <>
-            <button
-              onClick={() => setShowDelete(true)}
-              className="btn btn-ghost text-xs py-1.5 px-3"
-              style={{ color: 'var(--danger)' }}
-            >
-              <i className="fas fa-trash text-[11px]" />
-            </button>
-              </>
+            {processo.status === 'ARQUIVADO' && (
+              <button
+                onClick={() => restaurarMutation.mutate()}
+                disabled={restaurarMutation.isPending}
+                className="btn btn-ghost text-xs py-1.5 px-3"
+                title="Reativar processo"
+                style={{ color: 'var(--success)' }}
+              >
+                {restaurarMutation.isPending
+                  ? <span className="spinner" style={{ width: 12, height: 12 }} />
+                  : <i className="fas fa-rotate-left text-[11px]" />
+                }
+                <span className="hidden sm:inline ml-1">Reativar</span>
+              </button>
             )}
+            {/* ─── Menu de Ações (dropdown via portal) ─── */}
+            <div>
+              <button
+                ref={actionsBtnRef}
+                onClick={openActionsMenu}
+                className="btn btn-ghost text-xs py-1.5 px-3"
+                title="Ações"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                <i className="fas fa-ellipsis-vertical text-[12px]" />
+                <span className="hidden sm:inline ml-1">Ações</span>
+                <i className={`fas fa-chevron-${showActionsMenu ? 'up' : 'down'} text-[9px] ml-1`} />
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* ─── Abas ────────────────────────────────── */}
-      <div>
+      <div style={{ position: 'relative', zIndex: 1 }}>
         <div className="flex gap-1 overflow-x-auto pb-px border-b" style={{ borderColor: 'var(--border)' }}>
           {TABS.map(tab => {
             const count = tab.id === 'movimentacoes' ? (processo._count?.movimentacoes || processo.movimentacoes?.length || null)
@@ -313,6 +388,58 @@ export default function ProcessoDetail() {
       </div>
 
     </div>
+    {/* ─── Dropdown Ações (portal — escapa do overflow:hidden do card) ── */}
+    {showActionsMenu && createPortal(
+      <div
+        className="fixed"
+        style={{ top: menuPos.top, right: menuPos.right, zIndex: 9990 }}
+        onMouseDown={e => e.stopPropagation()}
+      >
+        <div
+          className="rounded-xl overflow-hidden animate-fadeIn"
+          style={{
+            minWidth: 230,
+            background: 'var(--glass-bg, rgba(10,10,10,.96))',
+            backdropFilter: 'blur(20px) saturate(1.3)',
+            WebkitBackdropFilter: 'blur(20px) saturate(1.3)',
+            border: '1px solid var(--border)',
+            boxShadow: '0 8px 32px rgba(0,0,0,.25)',
+          }}
+        >
+          <button
+            onClick={() => { setShowInfoExtra(true); setShowActionsMenu(false); }}
+            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left transition-colors hover:bg-white/5"
+            style={{ color: 'var(--text-primary)' }}
+          >
+            <i className="fas fa-eye text-xs w-4" style={{ color: 'var(--accent)' }} />
+            Visualizar dados do processo
+          </button>
+          {processo.status !== 'CONCLUIDO' && processo.status !== 'ARQUIVADO' && (
+            <button
+              onClick={() => { setShowConfirmArquivar(true); setShowActionsMenu(false); }}
+              disabled={arquivarMutation.isPending}
+              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left transition-colors hover:bg-white/5"
+              style={{ color: 'var(--text-primary)', borderTop: '1px solid var(--border)' }}
+            >
+              <i className="fas fa-box-archive text-xs w-4" style={{ color: 'var(--text-secondary)' }} />
+              Arquivar processo
+            </button>
+          )}
+          {processo.status !== 'CONCLUIDO' && processo.status !== 'ARQUIVADO' && (
+            <button
+              onClick={() => { setShowDelete(true); setShowActionsMenu(false); }}
+              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left transition-colors hover:bg-red-500/10"
+              style={{ color: 'var(--danger)', borderTop: '1px solid var(--border)' }}
+            >
+              <i className="fas fa-trash text-xs w-4" />
+              Excluir processo
+            </button>
+          )}
+        </div>
+      </div>,
+      document.body
+    )}
+
     {/* ═══ Modais — via portal para não ser afetado por transform do Layout ══ */}
 
       {/* ─── Modal Dados do Processo ────────────────── */}
@@ -505,6 +632,44 @@ export default function ProcessoDetail() {
                 >
                   {excluirMutation.isPending ? <span className="spinner" style={{ width: 16, height: 16 }} /> : <i className="fas fa-trash" />}
                   Excluir
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ─── Modal confirmar arquivamento ────────── */}
+      {showConfirmArquivar && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,.88)', backdropFilter: 'blur(8px)' }}
+          onClick={e => e.target === e.currentTarget && setShowConfirmArquivar(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl overflow-hidden animate-scaleIn text-center"
+            style={{ background: 'var(--glass-bg, rgba(10,17,40,.92))', backdropFilter: 'blur(24px) saturate(1.3)', WebkitBackdropFilter: 'blur(24px) saturate(1.3)', border: '1px solid rgba(255,255,255,.1)' }}
+          >
+            <div className="p-7">
+              <div className="flex items-center justify-center rounded-2xl mx-auto mb-4"
+                style={{ width: 54, height: 54, background: 'rgba(156,163,175,.12)' }}>
+                <i className="fas fa-box-archive text-xl" style={{ color: 'var(--text-secondary)' }} />
+              </div>
+              <h3 className="text-base font-bold mb-2">Arquivar processo?</h3>
+              <p className="text-sm mb-1" style={{ color: 'var(--text-secondary)' }}><strong>{cliente?.nome}</strong></p>
+              <p className="text-xs mb-6" style={{ color: 'var(--text-muted)' }}>
+                O processo será movido para a lista de arquivados. Você pode reativá-lo a qualquer momento.
+              </p>
+              <div className="flex gap-3">
+                <button onClick={() => setShowConfirmArquivar(false)} className="btn btn-ghost flex-1">Cancelar</button>
+                <button
+                  onClick={() => { arquivarMutation.mutate(); setShowConfirmArquivar(false); }}
+                  disabled={arquivarMutation.isPending}
+                  className="btn btn-gold flex-1 font-semibold"
+                >
+                  {arquivarMutation.isPending ? <span className="spinner" style={{ width: 16, height: 16 }} /> : <i className="fas fa-box-archive" />}
+                  {' '}Arquivar
                 </button>
               </div>
             </div>

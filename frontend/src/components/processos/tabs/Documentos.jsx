@@ -36,22 +36,13 @@ const extInfo = (arquivo = '') => {
   return map[ext] || { icon: 'fa-file', color: '#a0a0a0', preview: 'none' };
 };
 
-const TAGS = [
-  { id: 'prova',    label: 'Prova',    icon: 'fa-gavel',        color: '#ef4444' },
-  { id: 'contrato', label: 'Contrato', icon: 'fa-file-contract', color: '#3b82f6' },
-  { id: 'peticao',  label: 'Petição',  icon: 'fa-scroll',       color: '#8b5cf6' },
-  { id: 'decisao',  label: 'Decisão',  icon: 'fa-landmark',     color: '#f59e0b' },
-  { id: 'parecer',  label: 'Parecer',  icon: 'fa-clipboard-check', color: '#10b981' },
-  { id: 'reuniao',  label: 'Reunião',  icon: 'fa-users',        color: '#06b6d4' },
-  { id: 'outro',    label: 'Outro',    icon: 'fa-tag',          color: '#6b7280' },
-];
 
 const MAX_CHARS = 4000;
 
 /* ═══════════════════════════════════════════════════════════
    DocPreviewModal — Full-screen authenticated preview
 ═══════════════════════════════════════════════════════════ */
-function DocPreviewModal({ doc, onClose, onDelete, deleteLoading }) {
+function DocPreviewModal({ doc, onClose, onDelete, onRequestDelete, deleteLoading }) {
   const { preview, color, icon } = extInfo(doc.arquivo);
   const [blobUrl, setBlobUrl] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -98,7 +89,7 @@ function DocPreviewModal({ doc, onClose, onDelete, deleteLoading }) {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={handleDownload} disabled={!blobUrl} className="btn btn-ghost text-sm py-2"><i className="fas fa-download" /> Baixar</button>
-          <button onClick={() => window.confirm(`Excluir "${doc.nome}"?`) && onDelete(doc.id)} disabled={deleteLoading} className="btn btn-ghost text-sm py-2" style={{ color: 'var(--danger)' }}><i className="fas fa-trash" /> Excluir</button>
+          <button onClick={() => onRequestDelete(doc)} disabled={deleteLoading} className="btn btn-ghost text-sm py-2" style={{ color: 'var(--danger)' }}><i className="fas fa-trash" /> Excluir</button>
           <button onClick={onClose} className="flex items-center justify-center rounded-xl hover:opacity-70 transition-opacity" style={{ width: 36, height: 36, background: 'rgba(255,255,255,.03)' }}><i className="fas fa-xmark" style={{ color: 'var(--text-secondary)' }} /></button>
         </div>
       </div>
@@ -181,10 +172,10 @@ function AdicionarMaterialModal({ processo, onClose, editNota, onRefresh }) {
   const [abaModal, setAbaModal] = useState(editNota ? 'nota' : 'arquivo');
   const [titulo, setTitulo] = useState(editNota?.titulo || '');
   const [conteudo, setConteudo] = useState(editNota?.conteudo || '');
-  const [selectedTag, setSelectedTag] = useState('');
-  const [pendingFiles, setPendingFiles] = useState([]);
-  const [fileNames, setFileNames] = useState({});
+  const [nomeDocumento, setNomeDocumento] = useState('');
+  const [pendingFile, setPendingFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [showDeleteNota, setShowDeleteNota] = useState(false);
   const inputRef = useRef();
   const qc = useQueryClient();
 
@@ -192,11 +183,12 @@ function AdicionarMaterialModal({ processo, onClose, editNota, onRefresh }) {
   const nearLimit = charCount > MAX_CHARS * 0.85;
 
   const uploadMutation = useMutation({
-    mutationFn: ({ file, customName }) => {
+    mutationFn: ({ file, displayName }) => {
       const fd = new FormData();
       fd.append('arquivo', file);
       fd.append('processoId', processo.id);
-      fd.append('nome', customName || file.name);
+      // nome é apenas metadado de exibição — arquivo físico permanece inalterado
+      fd.append('nome', displayName || file.name);
       return api.post('/documentos/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
     },
     onSuccess: () => { qc.invalidateQueries(['processo', processo.id]); },
@@ -228,28 +220,23 @@ function AdicionarMaterialModal({ processo, onClose, editNota, onRefresh }) {
 
   const handleFiles = (files) => {
     const fileList = Array.from(files);
-    setPendingFiles(prev => [...prev, ...fileList]);
+    if (fileList.length > 0) setPendingFile(fileList[0]);
   };
 
-  const updateFileName = (index, name) => {
-    setFileNames(prev => ({ ...prev, [index]: name }));
-  };
-
-  const removePendingFile = (index) => {
-    setPendingFiles(prev => prev.filter((_, i) => i !== index));
-    setFileNames(prev => { const copy = { ...prev }; delete copy[index]; return copy; });
+  const removePendingFile = () => {
+    setPendingFile(null);
   };
 
   const handleUploadAll = async () => {
-    if (pendingFiles.length === 0) return;
+    if (!pendingFile || !nomeDocumento.trim()) return;
     setUploading(true);
     try {
-      for (let i = 0; i < pendingFiles.length; i++) {
-        const file = pendingFiles[i];
-        const customName = fileNames[i]?.trim() || file.name;
-        await uploadMutation.mutateAsync({ file, customName });
-      }
-      toast.success(`${pendingFiles.length} arquivo${pendingFiles.length > 1 ? 's enviados' : ' enviado'}!`);
+      const ext = '.' + pendingFile.name.split('.').pop();
+      const displayName = nomeDocumento.trim().endsWith(ext)
+        ? nomeDocumento.trim()
+        : nomeDocumento.trim() + ext;
+      await uploadMutation.mutateAsync({ file: pendingFile, displayName });
+      toast.success('Arquivo enviado!');
       onClose();
     } catch {
       // individual errors handled by mutation
@@ -264,22 +251,9 @@ function AdicionarMaterialModal({ processo, onClose, editNota, onRefresh }) {
   };
 
   const baixarNotaPDF = async () => {
-    const html2pdf = (await import('html2pdf.js')).default;
-    const element = document.createElement('div');
-    element.innerHTML = `
-      <div style="font-family: 'Times New Roman', Times, serif; color: #000; font-size: 12pt; padding: 25px 40px; line-height: 1.6; text-align: justify;">
-        ${conteudo}
-      </div>
-    `;
+    const { exportarPDFComCabecalho } = await import('../../../utils/pdfExport');
     const cleanTitle = (titulo || 'Nota').replace(/[^a-zA-Z0-9 -]/g, '').trim();
-    const opt = {
-      margin:       [20, 0, 25, 0],
-      filename:     `${cleanTitle}.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, useCORS: true },
-      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
-    html2pdf().from(element).set(opt).save();
+    await exportarPDFComCabecalho(conteudo, cleanTitle, { toast });
   };
 
   const tabs = [
@@ -345,87 +319,100 @@ function AdicionarMaterialModal({ processo, onClose, editNota, onRefresh }) {
           {/* ── Arquivo Tab ── */}
           {abaModal === 'arquivo' && (
             <>
-              {/* Drop zone */}
-              <div
-                className="rounded-xl border-2 border-dashed p-8 text-center cursor-pointer transition-all"
-                style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
-                onClick={() => inputRef.current?.click()}
-                onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = '#C9A84C'; e.currentTarget.style.background = 'rgba(201,168,76,.04)'; }}
-                onDragLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'transparent'; }}
-                onDrop={e => {
-                  e.preventDefault();
-                  e.currentTarget.style.borderColor = 'var(--border)';
-                  e.currentTarget.style.background = 'transparent';
-                  handleFiles(e.dataTransfer.files);
-                }}
-              >
-                <i className="fas fa-cloud-arrow-up text-3xl mb-3 block" style={{ color: 'var(--accent)' }} />
-                <p className="text-sm font-medium">Arraste arquivos aqui ou <span style={{ color: 'var(--accent)' }}>clique para selecionar</span></p>
-                <p className="text-xs mt-1.5" style={{ color: 'var(--text-muted)' }}>PDF, DOC, XLSX, JPG, PNG — máx. 50MB</p>
+              {/* Passo 1 — Nome do documento (antes do anexo) */}
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                  <span
+                    className="inline-flex items-center justify-center rounded-full mr-1.5"
+                    style={{ width: 16, height: 16, background: 'rgba(201,168,76,.15)', color: 'var(--accent)', fontSize: 9, fontWeight: 800 }}
+                  >1</span>
+                  Nome do documento <span style={{ color: 'var(--accent)' }}>*</span>
+                </label>
+                <input
+                  className="input-base"
+                  style={{ fontSize: '0.875rem' }}
+                  placeholder="Ex: Contrato de Prestação de Serviços"
+                  value={nomeDocumento}
+                  onChange={e => setNomeDocumento(e.target.value)}
+                  autoFocus
+                />
+                <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                  Este será o nome exibido no sistema. O arquivo original não será renomeado.
+                </p>
               </div>
-              <input ref={inputRef} type="file" multiple className="hidden" onChange={e => handleFiles(e.target.files)} accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xlsx,.txt" />
 
-              {/* Pending files with rename */}
-              {pendingFiles.length > 0 && (
-                <div className="space-y-2">
-                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-                    <i className="fas fa-paperclip mr-1.5" style={{ color: 'var(--accent)' }} />
-                    {pendingFiles.length} arquivo{pendingFiles.length > 1 ? 's' : ''} selecionado{pendingFiles.length > 1 ? 's' : ''}
-                  </span>
-                  {pendingFiles.map((file, i) => {
-                    const { icon, color } = extInfo(file.name);
-                    const sizeMB = (file.size / 1024 / 1024).toFixed(1);
-                    const ext = '.' + file.name.split('.').pop();
-                    const baseName = fileNames[i] !== undefined ? fileNames[i] : file.name.replace(/\.[^.]+$/, '');
+              {/* Passo 2 — Anexar arquivo */}
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                  <span
+                    className="inline-flex items-center justify-center rounded-full mr-1.5"
+                    style={{
+                      width: 16, height: 16,
+                      background: nomeDocumento.trim() ? 'rgba(201,168,76,.15)' : 'rgba(255,255,255,.05)',
+                      color: nomeDocumento.trim() ? 'var(--accent)' : 'var(--text-muted)',
+                      fontSize: 9, fontWeight: 800,
+                    }}
+                  >2</span>
+                  Anexar arquivo <span style={{ color: 'var(--accent)' }}>*</span>
+                </label>
+
+                {!pendingFile ? (
+                  <div
+                    className="rounded-xl border-2 border-dashed p-8 text-center transition-all"
+                    style={{
+                      borderColor: 'var(--border)',
+                      color: 'var(--text-muted)',
+                      cursor: nomeDocumento.trim() ? 'pointer' : 'not-allowed',
+                      opacity: nomeDocumento.trim() ? 1 : 0.5,
+                    }}
+                    onClick={() => { if (nomeDocumento.trim()) inputRef.current?.click(); }}
+                    onDragOver={e => { if (!nomeDocumento.trim()) return; e.preventDefault(); e.currentTarget.style.borderColor = '#C9A84C'; e.currentTarget.style.background = 'rgba(201,168,76,.04)'; }}
+                    onDragLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'transparent'; }}
+                    onDrop={e => {
+                      e.preventDefault();
+                      e.currentTarget.style.borderColor = 'var(--border)';
+                      e.currentTarget.style.background = 'transparent';
+                      if (nomeDocumento.trim()) handleFiles(e.dataTransfer.files);
+                    }}
+                  >
+                    <i className="fas fa-cloud-arrow-up text-3xl mb-3 block" style={{ color: nomeDocumento.trim() ? 'var(--accent)' : 'var(--text-muted)' }} />
+                    <p className="text-sm font-medium">
+                      {nomeDocumento.trim()
+                        ? <>Arraste o arquivo aqui ou <span style={{ color: 'var(--accent)' }}>clique para selecionar</span></>
+                        : <>Informe o nome do documento acima para anexar o arquivo</>}
+                    </p>
+                    <p className="text-xs mt-1.5" style={{ color: 'var(--text-muted)' }}>PDF, DOC, XLSX, JPG, PNG — máx. 50MB</p>
+                  </div>
+                ) : (
+                  (() => {
+                    const { icon, color } = extInfo(pendingFile.name);
+                    const sizeMB = (pendingFile.size / 1024 / 1024).toFixed(1);
                     return (
-                      <div key={i} className="rounded-xl p-3 animate-fadeIn" style={{ background: 'rgba(255,255,255,.03)', border: '1px solid var(--border)' }}>
+                      <div className="rounded-xl p-3 animate-fadeIn" style={{ background: 'rgba(255,255,255,.03)', border: '1px solid var(--border)' }}>
                         <div className="flex items-center gap-3">
-                          <div className="rounded-lg flex items-center justify-center flex-shrink-0" style={{ width: 36, height: 36, background: `${color}18` }}>
-                            <i className={`fas ${icon} text-sm`} style={{ color }} />
+                          <div className="rounded-lg flex items-center justify-center flex-shrink-0" style={{ width: 40, height: 40, background: `${color}18` }}>
+                            <i className={`fas ${icon} text-base`} style={{ color }} />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1">
-                              <input
-                                className="input-base text-sm py-1 px-2"
-                                style={{ background: 'rgba(255,255,255,.04)', border: '1px solid var(--border)', borderRadius: 8, fontSize: '0.8rem' }}
-                                value={baseName}
-                                onChange={e => updateFileName(i, e.target.value)}
-                                placeholder="Nome do arquivo"
-                              />
-                              <span className="text-xs flex-shrink-0" style={{ color: 'var(--text-muted)' }}>{ext}</span>
-                            </div>
-                            <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{sizeMB} MB</p>
+                            <p className="text-sm font-medium truncate">{pendingFile.name}</p>
+                            <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{sizeMB} MB · arquivo original preservado</p>
                           </div>
-                          <button onClick={() => removePendingFile(i)} className="text-xs hover:opacity-70 transition-opacity p-1" style={{ color: 'var(--danger)' }} title="Remover">
+                          <button onClick={removePendingFile} className="text-xs hover:opacity-70 transition-opacity p-1.5 rounded-lg" style={{ color: 'var(--danger)' }} title="Remover">
                             <i className="fas fa-xmark" />
                           </button>
                         </div>
                       </div>
                     );
-                  })}
-                </div>
-              )}
+                  })()
+                )}
 
-              {/* Tags */}
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider block mb-2" style={{ color: 'var(--text-secondary)' }}>Categoria (opcional)</label>
-                <div className="flex flex-wrap gap-2">
-                  {TAGS.map(tag => (
-                    <button
-                      key={tag.id}
-                      onClick={() => setSelectedTag(selectedTag === tag.id ? '' : tag.id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
-                      style={{
-                        background: selectedTag === tag.id ? `${tag.color}20` : 'rgba(255,255,255,.04)',
-                        color: selectedTag === tag.id ? tag.color : 'var(--text-secondary)',
-                        border: `1px solid ${selectedTag === tag.id ? `${tag.color}40` : 'var(--border)'}`,
-                      }}
-                    >
-                      <i className={`fas ${tag.icon} text-[10px]`} />
-                      {tag.label}
-                    </button>
-                  ))}
-                </div>
+                <input
+                  ref={inputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={e => handleFiles(e.target.files)}
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xlsx,.txt"
+                />
               </div>
             </>
           )}
@@ -474,7 +461,7 @@ function AdicionarMaterialModal({ processo, onClose, editNota, onRefresh }) {
           <div>
             {editNota?.id && (
               <button
-                onClick={() => { if (window.confirm('Deseja excluir esta nota?')) deleteNotaMutation.mutate(editNota.id); }}
+                onClick={() => setShowDeleteNota(true)}
                 disabled={deleteNotaMutation.isPending}
                 className="btn btn-danger text-xs"
               >
@@ -485,8 +472,14 @@ function AdicionarMaterialModal({ processo, onClose, editNota, onRefresh }) {
           <div className="flex gap-2">
             <button onClick={onClose} className="btn btn-ghost text-sm">Cancelar</button>
             {abaModal === 'arquivo' ? (
-              <button onClick={handleUploadAll} disabled={pendingFiles.length === 0 || uploading} className="btn btn-gold text-sm">
-                {uploading ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Enviando...</> : <><i className="fas fa-upload" /> Enviar {pendingFiles.length > 1 ? `(${pendingFiles.length})` : ''}</>}
+              <button
+                onClick={handleUploadAll}
+                disabled={!pendingFile || !nomeDocumento.trim() || uploading}
+                className="btn btn-gold text-sm"
+              >
+                {uploading
+                  ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Enviando...</>
+                  : <><i className="fas fa-upload" /> Enviar arquivo</>}
               </button>
             ) : (
               <>
@@ -503,6 +496,17 @@ function AdicionarMaterialModal({ processo, onClose, editNota, onRefresh }) {
           </div>
         </div>
       </div>
+
+      {/* Confirm delete nota */}
+      {showDeleteNota && (
+        <ConfirmDeleteModal
+          title="Excluir esta nota?"
+          message="Esta ação não pode ser desfeita."
+          onConfirm={() => deleteNotaMutation.mutate(editNota.id)}
+          onCancel={() => setShowDeleteNota(false)}
+          loading={deleteNotaMutation.isPending}
+        />
+      )}
     </div>,
     document.body
   );
@@ -562,24 +566,11 @@ function RenameDocModal({ doc, onClose }) {
 /* ═══════════════════════════════════════════════════════════
    NotaViewModal — Read-only view with Edit button
 ═══════════════════════════════════════════════════════════ */
-function NotaViewModal({ nota, onClose, onEdit, onDelete, deleteLoading }) {
+function NotaViewModal({ nota, onClose, onEdit, onDelete, onRequestDelete, deleteLoading }) {
   const baixarPDF = async () => {
-    const html2pdf = (await import('html2pdf.js')).default;
-    const element = document.createElement('div');
-    element.innerHTML = `
-      <div style="font-family: 'Times New Roman', Times, serif; color: #000; font-size: 12pt; padding: 25px 40px; line-height: 1.6; text-align: justify;">
-        ${nota.conteudo}
-      </div>
-    `;
+    const { exportarPDFComCabecalho } = await import('../../../utils/pdfExport');
     const cleanTitle = (nota.titulo || 'Nota').replace(/[^a-zA-Z0-9 -]/g, '').trim();
-    const opt = {
-      margin: [20, 0, 25, 0],
-      filename: `${cleanTitle}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    };
-    html2pdf().from(element).set(opt).save();
+    await exportarPDFComCabecalho(nota.conteudo, cleanTitle, { toast });
   };
 
   return createPortal(
@@ -600,7 +591,7 @@ function NotaViewModal({ nota, onClose, onEdit, onDelete, deleteLoading }) {
           <button onClick={() => { onClose(); onEdit(nota); }} className="btn btn-ghost text-sm py-2"><i className="fas fa-pen" /> Editar</button>
           <button onClick={baixarPDF} className="btn btn-ghost text-sm py-2"><i className="fas fa-download" /> PDF</button>
           <button
-            onClick={() => window.confirm('Deseja excluir esta nota?') && onDelete(nota.id)}
+            onClick={() => onRequestDelete(nota)}
             disabled={deleteLoading}
             className="btn btn-ghost text-sm py-2"
             style={{ color: 'var(--danger)' }}
@@ -629,6 +620,43 @@ function NotaViewModal({ nota, onClose, onEdit, onDelete, deleteLoading }) {
   );
 }
 
+/* ─── ConfirmDeleteModal ─────────────────────────── */
+function ConfirmDeleteModal({ title, message, onConfirm, onCancel, loading }) {
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,.88)', backdropFilter: 'blur(8px)' }}
+      onClick={e => e.target === e.currentTarget && onCancel()}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl overflow-hidden animate-scaleIn text-center"
+        style={{ background: 'var(--glass-bg)', backdropFilter: 'blur(24px) saturate(1.3)', WebkitBackdropFilter: 'blur(24px) saturate(1.3)', border: '1px solid var(--border)' }}
+      >
+        <div className="p-6">
+          <div className="flex items-center justify-center rounded-2xl mx-auto mb-4" style={{ width: 52, height: 52, background: 'rgba(239,68,68,.1)' }}>
+            <i className="fas fa-trash text-lg" style={{ color: 'var(--danger)' }} />
+          </div>
+          <h3 className="text-sm font-bold mb-1">{title}</h3>
+          {message && <p className="text-xs mb-5" style={{ color: 'var(--text-muted)' }}>{message}</p>}
+          <div className="flex gap-3 mt-4">
+            <button onClick={onCancel} className="btn btn-ghost flex-1 text-sm">Cancelar</button>
+            <button
+              onClick={onConfirm}
+              disabled={loading}
+              className="btn flex-1 text-sm font-semibold"
+              style={{ background: 'var(--danger)', color: '#fff' }}
+            >
+              {loading ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <i className="fas fa-trash" />}
+              Excluir
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 export default function TabDocumentos({ processo }) {
   const [docAberto, setDocAberto] = useState(null);
   const [showModelos, setShowModelos] = useState(false);
@@ -636,7 +664,8 @@ export default function TabDocumentos({ processo }) {
   const [editNota, setEditNota] = useState(null);
   const [viewNota, setViewNota] = useState(null);
   const [renameDoc, setRenameDoc] = useState(null);
-  const [filtro, setFiltro] = useState('todos'); // todos | arquivos | notas
+  const [confirmDeleteDoc, setConfirmDeleteDoc] = useState(null); // doc object
+  const [confirmDeleteNota, setConfirmDeleteNota] = useState(null); // nota object
   const qc = useQueryClient();
 
   const deleteMutation = useMutation({
@@ -645,6 +674,7 @@ export default function TabDocumentos({ processo }) {
       qc.invalidateQueries(['processo', processo.id]);
       toast.success('Documento excluído.');
       setDocAberto(null);
+      setConfirmDeleteDoc(null);
     },
   });
 
@@ -654,6 +684,7 @@ export default function TabDocumentos({ processo }) {
       qc.invalidateQueries(['processo', processo.id]);
       toast.success('Nota excluída.');
       setViewNota(null);
+      setConfirmDeleteNota(null);
     },
     onError: () => toast.error('Erro ao excluir nota.'),
   });
@@ -661,53 +692,25 @@ export default function TabDocumentos({ processo }) {
   const docs = processo.documentos || [];
   const anotacoes = processo.anotacoes || [];
 
-  // Build unified list
+  // Build unified list (sem filtro — exibe todos)
   const items = [];
-  if (filtro === 'todos' || filtro === 'arquivos') {
-    docs.forEach(d => items.push({ type: 'doc', data: d, date: new Date(d.criadoEm) }));
-    anotacoes.forEach(a => {
-      if (a.titulo && a.titulo.endsWith('\u200B')) {
-        items.push({ type: 'doc_gerado', data: a, date: new Date(a.criadoEm) });
-      }
-    });
-  }
-  if (filtro === 'todos' || filtro === 'notas') {
-    anotacoes.forEach(a => {
-      if (!(a.titulo && a.titulo.endsWith('\u200B'))) {
-        items.push({ type: 'nota', data: a, date: new Date(a.criadoEm) });
-      }
-    });
-  }
+  docs.forEach(d => items.push({ type: 'doc', data: d, date: new Date(d.criadoEm) }));
+  anotacoes.forEach(a => {
+    if (a.titulo && a.titulo.endsWith('\u200B')) {
+      items.push({ type: 'doc_gerado', data: a, date: new Date(a.criadoEm) });
+    } else {
+      items.push({ type: 'nota', data: a, date: new Date(a.criadoEm) });
+    }
+  });
   items.sort((a, b) => b.date - a.date);
-
-  const filterTabs = [
-    { id: 'todos', label: 'Todos', count: items.length },
-    { id: 'arquivos', label: 'Arquivos', count: items.filter(i => i.type === 'doc' || i.type === 'doc_gerado').length, icon: 'fa-file' },
-    { id: 'notas', label: 'Notas', count: items.filter(i => i.type === 'nota').length, icon: 'fa-pen-nib' },
-  ];
 
   return (
     <div>
       {/* ── Toolbar ── */}
       <div className="flex justify-between items-center mb-5 gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          {filterTabs.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setFiltro(t.id)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-              style={{
-                background: filtro === t.id ? 'rgba(201,168,76,.1)' : 'rgba(255,255,255,.03)',
-                color: filtro === t.id ? 'var(--accent)' : 'var(--text-secondary)',
-                border: `1px solid ${filtro === t.id ? 'rgba(201,168,76,.2)' : 'var(--border)'}`,
-              }}
-            >
-              {t.icon && <i className={`fas ${t.icon} text-[10px]`} />}
-              {t.label}
-              <span className="text-[10px] opacity-60">({t.count})</span>
-            </button>
-          ))}
-        </div>
+        <span className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
+          {items.length} {items.length === 1 ? 'item' : 'itens'}
+        </span>
         <div className="flex gap-2">
           <button onClick={() => setShowModelos(true)} className="btn btn-ghost text-xs py-2">
             <i className="fas fa-wand-magic-sparkles" style={{ color: 'var(--accent)' }} /> Modelo
@@ -820,8 +823,32 @@ export default function TabDocumentos({ processo }) {
 
       {/* ── Modals ── */}
       {docAberto && createPortal(
-        <DocPreviewModal doc={docAberto} onClose={() => setDocAberto(null)} onDelete={(id) => deleteMutation.mutate(id)} deleteLoading={deleteMutation.isPending} />,
+        <DocPreviewModal
+          doc={docAberto}
+          onClose={() => setDocAberto(null)}
+          onDelete={(id) => deleteMutation.mutate(id)}
+          onRequestDelete={(doc) => setConfirmDeleteDoc(doc)}
+          deleteLoading={deleteMutation.isPending}
+        />,
         document.body
+      )}
+      {confirmDeleteDoc && (
+        <ConfirmDeleteModal
+          title={`Excluir "${confirmDeleteDoc.nome}"?`}
+          message="O arquivo será removido permanentemente."
+          onConfirm={() => deleteMutation.mutate(confirmDeleteDoc.id)}
+          onCancel={() => setConfirmDeleteDoc(null)}
+          loading={deleteMutation.isPending}
+        />
+      )}
+      {confirmDeleteNota && (
+        <ConfirmDeleteModal
+          title={`Excluir "${confirmDeleteNota.titulo || 'esta nota'}"?`}
+          message="A nota será removida permanentemente."
+          onConfirm={() => deleteNotaMut.mutate(confirmDeleteNota.id)}
+          onCancel={() => setConfirmDeleteNota(null)}
+          loading={deleteNotaMut.isPending}
+        />
       )}
       {showModelos && <EscolherModeloModal processo={processo} onClose={() => setShowModelos(false)} />}
       {showAddModal && (
@@ -838,6 +865,7 @@ export default function TabDocumentos({ processo }) {
           onClose={() => setViewNota(null)}
           onEdit={(nota) => { setViewNota(null); setEditNota(nota); setShowAddModal(true); }}
           onDelete={(id) => deleteNotaMut.mutate(id)}
+          onRequestDelete={(nota) => { setViewNota(null); setConfirmDeleteNota(nota); }}
           deleteLoading={deleteNotaMut.isPending}
         />
       )}

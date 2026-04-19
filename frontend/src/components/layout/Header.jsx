@@ -1,10 +1,12 @@
 import { useNavigate } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
+import useThemeStore from '../../store/themeStore';
 
 export default function Header({ titulo, subtitulo }) {
   const navigate = useNavigate();
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef(null);
+  const { theme, toggleTheme } = useThemeStore();
 
   useEffect(() => {
     const handler = (e) => {
@@ -39,7 +41,35 @@ export default function Header({ titulo, subtitulo }) {
         )}
       </div>
 
-      <div className="relative" ref={menuRef}>
+      <div className="flex items-center gap-2">
+        {/* ─── Theme Toggle ─── */}
+        <button
+          onClick={toggleTheme}
+          title={theme === 'dark' ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro'}
+          className="flex items-center justify-center rounded-lg transition-all duration-300"
+          style={{
+            width: 34,
+            height: 34,
+            background: 'rgba(255,255,255,.03)',
+            border: '1px solid rgba(255,255,255,.06)',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = 'rgba(201,168,76,.08)';
+            e.currentTarget.style.borderColor = 'rgba(201,168,76,.15)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'rgba(255,255,255,.03)';
+            e.currentTarget.style.borderColor = 'rgba(255,255,255,.06)';
+          }}
+        >
+          <i
+            className={`fas ${theme === 'dark' ? 'fa-sun' : 'fa-moon'} text-sm transition-all duration-300`}
+            style={{ color: 'var(--text-muted)' }}
+          />
+        </button>
+
+        {/* ─── Gear / Configurações ─── */}
+        <div className="relative" ref={menuRef}>
         <button
           onClick={() => setShowMenu(v => !v)}
           className="flex items-center justify-center rounded-lg transition-all duration-300"
@@ -109,6 +139,7 @@ export default function Header({ titulo, subtitulo }) {
             ))}
           </div>
         )}
+        </div>
       </div>
     </header>
   );

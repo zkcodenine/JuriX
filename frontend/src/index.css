@@ -4,12 +4,12 @@
 
 /* ═══════════════════════════════════════════════════════════
    JURIX — Design System v5
-   Glass Morphism · Pure Black · Gold Accent · Animated
+   Glass Morphism · Gold Accent · Light + Dark Themes
 ═══════════════════════════════════════════════════════════ */
 
 :root {
   color-scheme: dark;
-  /* Theme: Azul + Amarelo */
+  /* Theme: Dark (Azul + Dourado) */
   --bg-primary:    #0a1128;
   --bg-secondary:  #101d42;
   --bg-tertiary:   rgba(255,255,255,.06);
@@ -42,6 +42,322 @@
   --glass-blur:    blur(20px) saturate(1.4);
   --glass-bg:      rgba(10,17,40,.7);
   --glass-border:  rgba(255,255,255,.15);
+  --select-bg:     #0f1b3d;
+  --select-color:  #e2e8f0;
+  --skeleton-from: rgba(255,255,255,.03);
+  --skeleton-mid:  rgba(255,255,255,.06);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LIGHT THEME — Fundo branco puro, alto contraste
+═══════════════════════════════════════════════════════════ */
+body.light {
+  color-scheme: light;
+  /* Base branca pura — apenas os backgrounds, acentos dourados preservados */
+  --bg-primary:    #ffffff;   /* fundo geral — branco puro */
+  --bg-secondary:  #f7f7f8;   /* sidebar / surfaces */
+  --bg-tertiary:   #eef0f2;   /* hover / zebras */
+  --bg-card:       #ffffff;   /* cards — branco */
+  --bg-elevated:   #ffffff;   /* modais */
+  --bg-hover:      rgba(15,23,42,.05);
+  --text-primary:  #0f172a;
+  --text-secondary:#475569;
+  --text-muted:    #64748b;
+  --accent:        #b8893d;
+  --accent-hover:  #a07a2a;
+  --accent-light:  rgba(184,137,61,.12);
+  --accent-border: rgba(184,137,61,.45);
+  --accent-fg:     #ffffff;
+  --danger:        #dc2626;
+  --success:       #059669;
+  --warning:       #d97706;
+  --info:          #2563eb;
+  --border:        rgba(15,23,42,.10);
+  --border-strong: rgba(15,23,42,.18);
+  --shadow-sm:     0 1px 3px rgba(15,23,42,.06), 0 1px 2px rgba(15,23,42,.04);
+  --shadow:        0 4px 14px rgba(15,23,42,.08), 0 2px 4px rgba(15,23,42,.04);
+  --shadow-lg:     0 16px 40px rgba(15,23,42,.14), 0 4px 10px rgba(15,23,42,.06);
+  --shadow-gold:   0 4px 20px rgba(184,137,61,.22);
+  --glass-blur:    blur(14px) saturate(1.3);
+  --glass-bg:      rgba(255,255,255,.82);
+  --glass-border:  rgba(15,23,42,.10);
+  --select-bg:     #ffffff;
+  --select-color:  #0f172a;
+  --skeleton-from: rgba(15,23,42,.04);
+  --skeleton-mid:  rgba(15,23,42,.08);
+}
+
+/* Light mode: fundo branco puro */
+body.light {
+  background: var(--bg-primary) !important;
+  color: var(--text-primary);
+}
+
+/* ── Overrides catch-all para cores escuras hard-coded em componentes ── */
+body.light [style*="rgba(10,17,40"],
+body.light [style*="rgba(10, 17, 40"] {
+  background: var(--bg-secondary) !important;
+}
+body.light [style*="rgba(5,5,8"],
+body.light [style*="rgba(5, 5, 8"],
+body.light [style*="rgba(0,0,0,.85)"],
+body.light [style*="rgba(0, 0, 0, .85)"] {
+  background: var(--bg-card) !important;
+}
+/* Cards glass escuros (rgba(255,255,255,.03)) viram cinza clarinho com glass */
+body.light [style*="rgba(255,255,255,.03)"],
+body.light [style*="rgba(255,255,255,.04)"],
+body.light [style*="rgba(255,255,255,.05)"] {
+  background: rgba(15,23,42,.035) !important;
+}
+body.light [style*="#0a1128"],
+body.light [style*="#101d42"],
+body.light [style*="#0f1b3d"] {
+  background: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+}
+/* Texto em azul claro do dark-mode vira cinza escuro */
+body.light [style*="#bfdbfe"],
+body.light [style*="#93c5fd"] {
+  color: var(--text-secondary) !important;
+}
+/* Bordas brancas translúcidas viram bordas cinza */
+body.light [style*="rgba(255,255,255,.06)"],
+body.light [style*="rgba(255,255,255,.08)"],
+body.light [style*="rgba(255,255,255,.1)"],
+body.light [style*="rgba(255,255,255,.12)"],
+body.light [style*="rgba(255,255,255,.15)"] {
+  border-color: var(--border) !important;
+}
+/* Amarelo-ouro dark => dourado light em accents inline */
+body.light [style*="rgba(250,204,21"] {
+  /* mantém leitura — fallback; componentes específicos ajustados abaixo */
+}
+
+/* Sidebar: fundo branco com glass leve */
+body.light aside {
+  background: rgba(247,247,248,.92) !important;
+  border-right-color: rgba(15,23,42,.10) !important;
+  backdrop-filter: blur(16px) saturate(1.1) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.1) !important;
+}
+/* Header do topo */
+body.light header {
+  background: rgba(255,255,255,.88) !important;
+  border-bottom-color: rgba(15,23,42,.10) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* Banners / cards tingidos — tons suaves coloridos ao invés de vidro escuro */
+body.light .banner-info,
+body.light .banner-warning,
+body.light .banner-success,
+body.light .banner-danger {
+  border-width: 1px;
+  border-style: solid;
+}
+body.light .banner-info    { background: #f5f1e8; border-color: #e4d4a8; color: #5a4a1f; }
+body.light .banner-warning { background: #faf3e0; border-color: #e8d08a; color: #7a5a15; }
+body.light .banner-success { background: #f0ebdb; border-color: #d4c090; color: #4a3f1a; }
+body.light .banner-danger  { background: #f3ece0; border-color: #d4a876; color: #6b3f1a; }
+/* Banners neutros cinza-dourado */
+body.light .banner-neutral,
+body.light .banner-default { background: #f1f0ec; border-color: #d8d5cc; color: #3d3a32; }
+
+/* Texto: todas classes utilitárias de cor clara dark => cinza escuro */
+body.light .text-white    { color: var(--text-primary) !important; }
+body.light .text-gray-300,
+body.light .text-gray-400,
+body.light .text-slate-300,
+body.light .text-slate-400,
+body.light .text-blue-200,
+body.light .text-blue-300 { color: var(--text-secondary) !important; }
+body.light .text-slate-500,
+body.light .text-gray-500 { color: var(--text-muted) !important; }
+
+/* Light mode: cards em fundo branco */
+body.light .card {
+  background: var(--bg-card);
+  border: 1px solid rgba(15,23,42,.08);
+  box-shadow: var(--shadow-sm);
+}
+body.light .card-hover:hover {
+  box-shadow: var(--shadow), 0 0 0 1px var(--accent-border);
+  border-color: var(--accent-border);
+}
+
+/* Light mode: gold gradient background permanece dourado coerente com o tema */
+body.light .bg-gold-gradient {
+  background:
+    radial-gradient(ellipse at 20% 20%, rgba(184,137,61,.22) 0%, transparent 55%),
+    radial-gradient(ellipse at 80% 80%, rgba(201,168,76,.16) 0%, transparent 55%),
+    var(--bg-primary);
+}
+
+/* Light mode: inputs em branco */
+body.light .input-base {
+  background: #ffffff;
+  border: 1.5px solid rgba(15,23,42,.12);
+  color: var(--text-primary);
+}
+body.light .input-base:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+/* Light mode: botões */
+body.light .btn-primary {
+  background: linear-gradient(135deg, #d4a84a, #b8893d);
+  color: #fff;
+  border: 1px solid rgba(184,137,61,.5);
+  box-shadow: var(--shadow-sm);
+}
+body.light .btn-primary:hover {
+  background: linear-gradient(135deg, #c9a84c, #a07a2a);
+  box-shadow: var(--shadow);
+}
+body.light .btn-ghost {
+  color: var(--text-secondary);
+}
+body.light .btn-ghost:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+body.light .btn-danger {
+  background: rgba(220,38,38,.08);
+  color: var(--danger);
+  border-color: rgba(220,38,38,.22);
+}
+body.light .btn-danger:hover {
+  background: rgba(220,38,38,.14);
+}
+
+/* Light mode: status badges */
+body.light .status-ativo {
+  background: rgba(5,150,105,.1);
+  color: var(--success);
+  border-color: rgba(5,150,105,.25);
+}
+body.light .status-pendente {
+  background: rgba(217,119,6,.1);
+  color: var(--warning);
+  border-color: rgba(217,119,6,.25);
+}
+body.light .status-arquivado,
+body.light .status-concluido,
+body.light .status-encerrado {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+
+/* Light mode: table */
+body.light th {
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+}
+body.light td {
+  color: var(--text-primary);
+}
+body.light tr:hover td {
+  background: var(--bg-tertiary);
+}
+
+/* Light mode: scrollbar */
+body.light ::-webkit-scrollbar-thumb {
+  background: rgba(15,23,42,.2);
+}
+body.light ::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* Light mode: selection */
+body.light ::selection {
+  background: rgba(184,137,61,.25);
+  color: var(--text-primary);
+}
+
+/* Light mode: remove backdrop-filter de glass para manter branco limpo */
+body.light .glass {
+  background: rgba(255,255,255,.95);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-color: var(--glass-border);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Light mode status badges */
+body.light .status-arquivado,
+body.light .status-concluido,
+body.light .status-encerrado {
+  background: rgba(0,0,0,.04);
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+
+/* Light mode nav active */
+body.light .nav-active {
+  background: rgba(201,168,76,.1) !important;
+}
+
+/* Light mode glass */
+body.light .glass {
+  background: var(--glass-bg);
+  border-color: var(--glass-border);
+}
+
+/* Light mode card hover */
+body.light .card-hover:hover {
+  box-shadow: 0 8px 32px rgba(0,0,0,.12), 0 0 0 1px var(--accent-border), inset 0 1px 0 var(--accent-border);
+}
+
+/* Light mode toast */
+body.light .Toastify__toast-theme--dark {
+  background: rgba(255,255,255,.96) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: var(--shadow) !important;
+}
+
+/* Light mode Quill editor */
+body.light .ql-themed {
+  background: #ffffff;
+  border-color: var(--border);
+}
+body.light .ql-themed .ql-toolbar.ql-snow {
+  background: rgba(0,0,0,.02) !important;
+  border-bottom-color: var(--border) !important;
+}
+body.light .ql-themed .ql-editor {
+  color: var(--text-primary) !important;
+}
+body.light .ql-themed .ql-snow .ql-stroke {
+  stroke: var(--text-secondary) !important;
+}
+body.light .ql-themed .ql-snow .ql-fill,
+body.light .ql-themed .ql-snow .ql-stroke.ql-fill {
+  fill: var(--text-secondary) !important;
+}
+body.light .ql-themed .ql-snow .ql-picker-label {
+  color: var(--text-secondary) !important;
+}
+body.light .ql-themed .ql-snow .ql-picker-options {
+  background: #ffffff !important;
+  border-color: var(--border) !important;
+}
+body.light .ql-themed .ql-snow .ql-picker-item {
+  color: var(--text-primary) !important;
+}
+body.light .ql-themed .ql-tooltip {
+  background: #ffffff !important;
+  border-color: var(--border) !important;
+  color: var(--text-primary) !important;
+}
+body.light .ql-themed .ql-tooltip input[type="text"] {
+  background: #f8fafc !important;
+  border-color: var(--border) !important;
+  color: var(--text-primary) !important;
 }
 
 body {
@@ -61,21 +377,21 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ─── Global select/option dark theme ────────────────── */
+/* ─── Global select/option theme-aware ────────────────── */
 select, select option {
-  background-color: #0f1b3d;
-  color: #e2e8f0;
+  background-color: var(--select-bg);
+  color: var(--select-color);
 }
 option:checked {
-  background-color: rgba(250,204,21,.2);
-  color: #facc15;
+  background-color: var(--accent-light);
+  color: var(--accent);
 }
 
-/* ─── Gold Gradient Background (fixed dark blue) ──────────── */
+/* ─── Gold Gradient Background ──────────── */
 .bg-gold-gradient {
   background:
     radial-gradient(ellipse at 20% 20%, var(--accent-light) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 80%, rgba(218,165,32,.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, var(--accent-light) 0%, transparent 50%),
     var(--bg-primary);
 }
 
@@ -205,9 +521,9 @@ option:checked {
 ═══════════════════════════════════════════════════════════ */
 .skeleton {
   background: linear-gradient(90deg,
-    rgba(255,255,255,.03) 25%,
-    rgba(255,255,255,.06) 50%,
-    rgba(255,255,255,.03) 75%
+    var(--skeleton-from) 25%,
+    var(--skeleton-mid) 50%,
+    var(--skeleton-from) 75%
   );
   background-size: 200% 100%;
   animation: shimmer 1.6s infinite;
@@ -324,18 +640,18 @@ option:checked {
 /* Native select dropdown option styling */
 select.input-base option,
 .input-base option {
-  background: #0f1b3d;
-  color: #e2e8f0;
+  background: var(--select-bg);
+  color: var(--select-color);
   padding: 8px 12px;
 }
 select.input-base option:checked,
 .input-base option:checked {
-  background: rgba(250,204,21,.2);
-  color: #facc15;
+  background: var(--accent-light);
+  color: var(--accent);
 }
 select.input-base option:hover,
 .input-base option:hover {
-  background: rgba(250,204,21,.1);
+  background: var(--accent-light);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -431,9 +747,9 @@ td { font-size: 14px; }
 .Toastify__toast-theme--light { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); }
 .Toastify__toast-theme--dark { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); }
 
-/* ─── Rich Text Editor (Quill) — Dark theme ─────────────────── */
+/* ─── Rich Text Editor (Quill) — Theme-aware ─────────────────── */
 .ql-themed {
-  background: var(--bg-secondary, #101d42);
+  background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
@@ -452,6 +768,14 @@ td { font-size: 14px; }
   font-size: 13px;
   white-space: pre-wrap !important;
 }
+/* Quill alignment classes — garante que centralizar/direita/justificar funciona */
+.ql-themed .ql-editor .ql-align-center { text-align: center !important; }
+.ql-themed .ql-editor .ql-align-right  { text-align: right !important; }
+.ql-themed .ql-editor .ql-align-justify { text-align: justify !important; }
+.ql-themed .ql-editor p,
+.ql-themed .ql-editor h1,
+.ql-themed .ql-editor h2,
+.ql-themed .ql-editor h3 { text-align: inherit; }
 .ql-themed .ql-snow .ql-stroke {
   stroke: var(--text-secondary, #94a3b8) !important;
 }
@@ -463,7 +787,7 @@ td { font-size: 14px; }
   color: var(--text-secondary, #94a3b8) !important;
 }
 .ql-themed .ql-snow .ql-picker-options {
-  background: var(--bg-card, #152244) !important;
+  background: var(--bg-elevated) !important;
   border: 1px solid var(--border) !important;
   border-radius: 8px !important;
 }
@@ -487,11 +811,11 @@ td { font-size: 14px; }
   background: rgba(250,204,21,.25) !important;
 }
 .ql-themed .ql-tooltip {
-  background: var(--bg-card) !important;
+  background: var(--bg-elevated) !important;
   border: 1px solid var(--border) !important;
   color: var(--text-primary) !important;
   border-radius: 8px !important;
-  box-shadow: 0 8px 32px rgba(0,0,0,.5) !important;
+  box-shadow: var(--shadow) !important;
 }
 .ql-themed .ql-tooltip input[type="text"] {
   background: var(--bg-secondary) !important;

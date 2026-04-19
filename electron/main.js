@@ -31,6 +31,36 @@ function resourcePath(...parts) {
   return path.join(base, ...parts)
 }
 
+// ── Kill any process already using a port (Windows + Unix) ───────────────────
+async function killPortIfBusy(port) {
+  const { execSync } = require('child_process')
+  try {
+    if (process.platform === 'win32') {
+      // netstat -ano | findstr :<port>  → extrai PIDs → kill
+      const out = execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf8', windowsHide: true })
+      const pids = new Set()
+      for (const line of out.split('\n')) {
+        const m = line.trim().match(/\s+(\d+)$/)
+        if (m) pids.add(m[1])
+      }
+      for (const pid of pids) {
+        if (pid === '0') continue
+        try {
+          execSync(`taskkill /F /PID ${pid}`, { windowsHide: true })
+          log.info(`[Main] Killed stale process PID ${pid} on port ${port}`)
+        } catch (_) {}
+      }
+    } else {
+      execSync(`fuser -k ${port}/tcp 2>/dev/null || true`)
+      log.info(`[Main] Freed port ${port} (fuser)`)
+    }
+    // Wait a moment for the port to be released
+    await new Promise(r => setTimeout(r, 600))
+  } catch (_) {
+    // Port was already free — no action needed
+  }
+}
+
 // ── Start backend ─────────────────────────────────────────────────────────────
 async function startBackend() {
   // Modo dev: backend já roda via nodemon separado
@@ -38,6 +68,9 @@ async function startBackend() {
     log.info('[Main] Dev mode — backend externo esperado na porta', BACKEND_PORT)
     return
   }
+
+  // Libera a porta caso processo anterior não tenha sido encerrado
+  await killPortIfBusy(BACKEND_PORT)
 
   return new Promise((resolve, reject) => {
     const serverScript = resourcePath('backend', 'src', 'server.js')
@@ -228,7 +261,17 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   app.isQuitting = true
-  backendProcess?.kill()
+  if (backendProcess) {
+    try { backendProcess.kill() } catch (_) {}
+    backendProcess = null
+  }
+  // Garante limpeza da porta ao sair (fallback para quando kill não funciona)
+  try {
+    const { execSync } = require('child_process')
+    if (process.platform === 'win32') {
+      execSync(`FOR /F "tokens=5" %P IN ('netstat -ano ^| findstr :${BACKEND_PORT}') DO taskkill /F /PID %P`, { windowsHide: true, shell: true })
+    }
+  } catch (_) {}
 })
 
 app.on('activate', () => {

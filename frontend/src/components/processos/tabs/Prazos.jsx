@@ -91,6 +91,7 @@ function ModalNovoPrazo({ onClose, onSave, isPending }) {
 }
 
 function ModalDetalhe({ prazo, onClose, onCumprir, onDelete, isCumprindo, isDeletando }) {
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const dias = diasAteVencer(prazo.dataVencimento);
   const vencido = dias !== null && dias < 0;
   const urgente = dias !== null && dias >= 0 && dias <= 3;
@@ -148,7 +149,7 @@ function ModalDetalhe({ prazo, onClose, onCumprir, onDelete, isCumprindo, isDele
 
         <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,.02)' }}>
           <button
-            onClick={() => { if (window.confirm('Deseja excluir este prazo?')) onDelete(prazo.id); }}
+            onClick={() => setShowConfirmDelete(true)}
             disabled={isDeletando}
             className="btn btn-danger"
             style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}
@@ -166,6 +167,38 @@ function ModalDetalhe({ prazo, onClose, onCumprir, onDelete, isCumprindo, isDele
           </button>
         </div>
       </div>
+
+      {/* Confirm delete */}
+      {showConfirmDelete && createPortal(
+        <div
+          className="fixed inset-0 flex items-center justify-center p-4"
+          style={{ zIndex: 10000, background: 'rgba(0,0,0,.88)', backdropFilter: 'blur(8px)' }}
+          onClick={e => e.target === e.currentTarget && setShowConfirmDelete(false)}
+        >
+          <div className="w-full max-w-sm rounded-2xl overflow-hidden animate-scaleIn text-center" style={{ background: 'var(--glass-bg)', backdropFilter: 'blur(24px)', border: '1px solid var(--border)' }}>
+            <div className="p-6">
+              <div className="flex items-center justify-center rounded-2xl mx-auto mb-4" style={{ width: 52, height: 52, background: 'rgba(239,68,68,.1)' }}>
+                <i className="fas fa-trash text-lg" style={{ color: 'var(--danger)' }} />
+              </div>
+              <h3 className="text-sm font-bold mb-1">Excluir prazo?</h3>
+              <p className="text-xs mb-5" style={{ color: 'var(--text-muted)' }}>Esta ação não pode ser desfeita.</p>
+              <div className="flex gap-3">
+                <button onClick={() => setShowConfirmDelete(false)} className="btn btn-ghost flex-1 text-sm">Cancelar</button>
+                <button
+                  onClick={() => { onDelete(prazo.id); setShowConfirmDelete(false); }}
+                  disabled={isDeletando}
+                  className="btn flex-1 text-sm font-semibold"
+                  style={{ background: 'var(--danger)', color: '#fff' }}
+                >
+                  {isDeletando ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <i className="fas fa-trash" />}
+                  Excluir
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>,
     document.body
   );

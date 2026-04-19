@@ -71,7 +71,14 @@ async function login(req, res, next) {
   try {
     const { email, senha } = req.body;
 
-    const usuario = await prisma.usuario.findUnique({ where: { email } });
+    const usuario = await prisma.usuario.findUnique({
+      where: { email },
+      select: {
+        id: true, nome: true, email: true, senha: true, ativo: true,
+        oab: true, telefone: true, avatar: true, tema: true,
+        plano: true, planoExpiracao: true, criadoEm: true,
+      },
+    });
     if (!usuario) {
       return res.status(401).json({ error: 'Credenciais inválidas.' });
     }

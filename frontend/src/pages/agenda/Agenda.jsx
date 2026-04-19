@@ -121,6 +121,43 @@ function EventoModal({ evento, etiquetas, onClose, onSaved }) {
   );
 }
 
+/* ─── Modal genérico de confirmação de exclusão ─── */
+function ConfirmDeleteModal({ title, message, onConfirm, onCancel, loading }) {
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,.88)', backdropFilter: 'blur(8px)' }}
+      onClick={e => e.target === e.currentTarget && onCancel()}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl overflow-hidden animate-scaleIn text-center"
+        style={{ background: 'var(--glass-bg)', backdropFilter: 'blur(24px) saturate(1.3)', WebkitBackdropFilter: 'blur(24px) saturate(1.3)', border: '1px solid var(--border)' }}
+      >
+        <div className="p-6">
+          <div className="flex items-center justify-center rounded-2xl mx-auto mb-4" style={{ width: 52, height: 52, background: 'rgba(239,68,68,.1)' }}>
+            <i className="fas fa-trash text-lg" style={{ color: 'var(--danger)' }} />
+          </div>
+          <h3 className="text-sm font-bold mb-1">{title}</h3>
+          {message && <p className="text-xs mb-5" style={{ color: 'var(--text-muted)' }}>{message}</p>}
+          <div className="flex gap-3 mt-4">
+            <button onClick={onCancel} className="btn btn-ghost flex-1 text-sm">Cancelar</button>
+            <button
+              onClick={onConfirm}
+              disabled={loading}
+              className="btn flex-1 text-sm font-semibold"
+              style={{ background: 'var(--danger)', color: '#fff' }}
+            >
+              {loading ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <i className="fas fa-trash" />}
+              {' '}Excluir
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 /* ─── Modal de Etiquetas (Correção 2: click to edit) ─── */
 const CORES_PRESET = ['#C9A84C','#ef4444','#f97316','#eab308','#22c55e','#10b981','#3b82f6','#8b5cf6','#ec4899','#64748b'];
 
@@ -231,6 +268,7 @@ function EtiquetasModal({ onClose }) {
 /* ─── Modal de Detalhe do Evento (Melhoria 5) ────── */
 function EventoDetailModal({ evento, onClose, onEdit, onDelete }) {
   const cor = evento.etiqueta?.cor || '#8b5cf6';
+  const [showConfirm, setShowConfirm] = useState(false);
   return createPortal(
     <div
       className="animate-fadeIn"
@@ -281,7 +319,7 @@ function EventoDetailModal({ evento, onClose, onEdit, onDelete }) {
               <i className="fas fa-pen" /> Editar
             </button>
             <button
-              onClick={() => { if (window.confirm('Remover este evento?')) { onDelete(evento.id); onClose(); } }}
+              onClick={() => setShowConfirm(true)}
               className="btn btn-ghost text-sm"
               style={{ color: 'var(--danger)' }}
             >
@@ -290,6 +328,14 @@ function EventoDetailModal({ evento, onClose, onEdit, onDelete }) {
           </div>
         </div>
       </div>
+      {showConfirm && (
+        <ConfirmDeleteModal
+          title="Excluir este evento?"
+          message="Esta ação não pode ser desfeita."
+          onConfirm={() => { onDelete(evento.id); setShowConfirm(false); onClose(); }}
+          onCancel={() => setShowConfirm(false)}
+        />
+      )}
     </div>,
     document.body
   );
@@ -365,6 +411,7 @@ function TarefaDetalheModal({ tarefa, onClose, navigate, onConcluir, toggleTaref
   const cor = priorCor[tarefa.prioridade] || '#3b82f6';
   const subs = tarefa.subtarefas || [];
   const concluidas = subs.filter(s => s.status === 'CONCLUIDA').length;
+  const [showConfirm, setShowConfirm] = useState(false);
 
   return createPortal(
     <div
@@ -461,7 +508,7 @@ function TarefaDetalheModal({ tarefa, onClose, navigate, onConcluir, toggleTaref
             {isDone ? <><i className="fas fa-rotate-left" style={{ color: '#f59e0b' }}/> Reabrir</> : <><i className="fas fa-check" style={{ color: '#10b981' }}/> Concluir</>}
           </button>
           <button
-            onClick={() => { if (window.confirm('Remover esta tarefa?')) { onDelete(tarefa.id); onClose(); } }}
+            onClick={() => setShowConfirm(true)}
             className="btn btn-ghost text-sm"
             style={{ color: 'var(--danger)' }}
           >
@@ -469,6 +516,14 @@ function TarefaDetalheModal({ tarefa, onClose, navigate, onConcluir, toggleTaref
           </button>
         </div>
       </div>
+      {showConfirm && (
+        <ConfirmDeleteModal
+          title={`Excluir "${tarefa.titulo}"?`}
+          message="Esta ação não pode ser desfeita."
+          onConfirm={() => { onDelete(tarefa.id); setShowConfirm(false); onClose(); }}
+          onCancel={() => setShowConfirm(false)}
+        />
+      )}
     </div>,
     document.body
   );
@@ -863,11 +918,13 @@ export default function Agenda() {
                     return (
                       <div
                         key={`${item._type}-${item.id}-${idx}`}
-                        className="truncate text-[10px] font-medium px-1.5 py-0.5 rounded cursor-pointer hover:brightness-125"
+                        className="truncate text-[12px] font-semibold px-2 py-1 rounded-md cursor-pointer hover:brightness-110 transition-all"
                         style={{
-                          background: `${cor}18`,
+                          background: `${cor}28`,
                           color: cor,
-                          borderLeft: `2px solid ${cor}`,
+                          borderLeft: `3px solid ${cor}`,
+                          minHeight: 22,
+                          lineHeight: 1.2,
                         }}
                         onClick={(e) => {
                           e.stopPropagation();

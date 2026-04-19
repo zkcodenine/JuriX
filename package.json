@@ -1,6 +1,6 @@
 {
   "name": "jurix",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "JuriX — Sistema de Gestão Jurídica",
   "main": "electron/main.js",
   "author": {
@@ -15,7 +15,8 @@
     "build": "npm run build:frontend && electron-builder --win",
     "build:dir": "npm run build:frontend && electron-builder --dir",
     "dist": "npm run build:frontend && electron-builder --publish always",
-    "process-icon": "node scripts/process-icon.js"
+    "process-icon": "node scripts/process-icon.js",
+    "update-logo": "node scripts/update-logo.js"
   },
   "dependencies": {
     "electron-log": "^5.2.0",

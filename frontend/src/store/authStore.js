@@ -11,8 +11,16 @@ const useAuthStore = create((set, get) => ({
     try {
       const { data } = await api.post('/auth/login', { email, senha });
       localStorage.setItem('jurix_token', data.token);
-      localStorage.setItem('jurix_user', JSON.stringify(data.usuario));
-      set({ token: data.token, usuario: data.usuario, loading: false });
+      // Cache-bust avatar on every fresh login
+      const usuarioComTs = { ...data.usuario, _avatarTs: Date.now() };
+      localStorage.setItem('jurix_user', JSON.stringify(usuarioComTs));
+      set({ token: data.token, usuario: usuarioComTs, loading: false });
+      // Sync fresh data in background (avatar, plano etc.)
+      api.get('/auth/me').then(({ data: me }) => {
+        const merged = { ...me, _avatarTs: Date.now() };
+        localStorage.setItem('jurix_user', JSON.stringify(merged));
+        set({ usuario: merged });
+      }).catch(() => {});
       return { ok: true };
     } catch (err) {
       set({ loading: false });

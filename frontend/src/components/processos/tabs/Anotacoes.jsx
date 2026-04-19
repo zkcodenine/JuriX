@@ -9,6 +9,7 @@ const MAX_CHARS = 4000;
 
 function ModalNota({ onClose, onSave, onDelete, isPending, isDeleting, editId, initialForm }) {
   const [form, setForm] = useState(initialForm || { titulo: '', conteudo: '' });
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const isEdit = Boolean(editId);
   const canSave = form.conteudo.trim() && !isPending;
   const charCount = form.conteudo.length;
@@ -80,7 +81,7 @@ function ModalNota({ onClose, onSave, onDelete, isPending, isDeleting, editId, i
           <div>
             {isEdit && (
               <button
-                onClick={() => { if (window.confirm('Deseja excluir esta nota?')) onDelete(editId); }}
+                onClick={() => setShowConfirmDelete(true)}
                 disabled={isDeleting}
                 className="btn btn-danger"
                 style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}
@@ -100,6 +101,38 @@ function ModalNota({ onClose, onSave, onDelete, isPending, isDeleting, editId, i
           </div>
         </div>
       </div>
+
+      {/* Confirm delete */}
+      {showConfirmDelete && createPortal(
+        <div
+          className="fixed inset-0 flex items-center justify-center p-4"
+          style={{ zIndex: 10000, background: 'rgba(0,0,0,.88)', backdropFilter: 'blur(8px)' }}
+          onClick={e => e.target === e.currentTarget && setShowConfirmDelete(false)}
+        >
+          <div className="w-full max-w-sm rounded-2xl overflow-hidden animate-scaleIn text-center" style={{ background: 'var(--glass-bg)', backdropFilter: 'blur(24px)', border: '1px solid var(--border)' }}>
+            <div className="p-6">
+              <div className="flex items-center justify-center rounded-2xl mx-auto mb-4" style={{ width: 52, height: 52, background: 'rgba(239,68,68,.1)' }}>
+                <i className="fas fa-trash text-lg" style={{ color: 'var(--danger)' }} />
+              </div>
+              <h3 className="text-sm font-bold mb-1">Excluir nota?</h3>
+              <p className="text-xs mb-5" style={{ color: 'var(--text-muted)' }}>Esta ação não pode ser desfeita.</p>
+              <div className="flex gap-3">
+                <button onClick={() => setShowConfirmDelete(false)} className="btn btn-ghost flex-1 text-sm">Cancelar</button>
+                <button
+                  onClick={() => { onDelete(editId); setShowConfirmDelete(false); }}
+                  disabled={isDeleting}
+                  className="btn flex-1 text-sm font-semibold"
+                  style={{ background: 'var(--danger)', color: '#fff' }}
+                >
+                  {isDeleting ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <i className="fas fa-trash" />}
+                  Excluir
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>,
     document.body
   );

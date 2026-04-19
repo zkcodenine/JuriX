@@ -153,30 +153,49 @@ function CardLabel({ icon, children, live, color }) {
 }
 
 /* ── Stat pill ────────────────────────────────────────────────────── */
-function StatPill({ value, label, borderColor = 'var(--accent)', valueColor, sub }) {
+function StatPill({ value, label, borderColor = 'var(--accent)', valueColor, sub, tint }) {
+  // tint: cor base do banner (glass tintado). Fallback p/ borderColor.
+  const base = tint || borderColor;
+  // Quando cor é CSS var, usa como está; senão aplica glass tint na própria cor
+  const isVar = typeof base === 'string' && base.startsWith('var(');
+  const bgStyle = isVar
+    ? {
+        background: `linear-gradient(135deg, rgba(201,168,76,.18), rgba(184,137,61,.10))`,
+      }
+    : {
+        background: `linear-gradient(135deg, ${base}28, ${base}10)`,
+      };
   return (
     <div className="dash-stat-pill group" style={{
-      background: 'rgba(255,255,255,.03)',
-      backdropFilter: 'blur(12px)',
-      WebkitBackdropFilter: 'blur(12px)',
-      border: `1px solid var(--border)`,
+      ...bgStyle,
+      backdropFilter: 'blur(14px) saturate(1.3)',
+      WebkitBackdropFilter: 'blur(14px) saturate(1.3)',
+      border: `1px solid ${isVar ? 'rgba(184,137,61,.35)' : `${base}45`}`,
       borderTop: `2px solid ${borderColor}`,
       borderRadius: 14, padding: '16px 14px', textAlign: 'center',
       position: 'relative', overflow: 'hidden',
       cursor: 'default',
+      boxShadow: `0 4px 20px ${isVar ? 'rgba(184,137,61,.12)' : `${base}20`}, inset 0 1px 0 rgba(255,255,255,.18)`,
     }}>
+      {/* brilho decorativo */}
       <div style={{
-        fontSize: 28, fontWeight: 800, color: valueColor || 'var(--text-primary)',
-        lineHeight: 1, letterSpacing: '-.5px',
+        position: 'absolute', top: -30, right: -30, width: 80, height: 80,
+        background: `radial-gradient(circle, ${isVar ? 'rgba(201,168,76,.25)' : `${base}35`} 0%, transparent 70%)`,
+        pointerEvents: 'none',
+      }} />
+      <div style={{
+        fontSize: 28, fontWeight: 800, color: valueColor || borderColor,
+        lineHeight: 1, letterSpacing: '-.5px', position: 'relative',
         animation: 'floatUp .5s ease both',
+        textShadow: '0 1px 2px rgba(0,0,0,.08)',
       }}>
         {typeof value === 'number' ? <AnimatedNumber value={value} /> : value}
       </div>
       <div style={{
         fontSize: '10.5px', color: 'var(--text-secondary)', textTransform: 'uppercase',
-        letterSpacing: '.6px', marginTop: 6, fontWeight: 600,
+        letterSpacing: '.6px', marginTop: 6, fontWeight: 700, position: 'relative',
       }}>{label}</div>
-      {sub && <div style={{ fontSize: 10, opacity: .7, marginTop: 4 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 10, opacity: .75, marginTop: 4, position: 'relative' }}>{sub}</div>}
     </div>
   );
 }
@@ -291,10 +310,10 @@ export default function Dashboard() {
         <DashCard colSpan="full" delay={0}>
           <CardLabel icon="fa-chart-bar" live>Visão Geral</CardLabel>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" style={{ marginTop: 4 }}>
-            <StatPill value={ind.processosAtivos ?? 0} label="Processos Ativos" borderColor="var(--accent)"
+            <StatPill value={ind.processosAtivos ?? 0} label="Processos Ativos" borderColor="#c9a84c" tint="#c9a84c"
               sub={ind.processosSuspensos > 0 ? `${ind.processosSuspensos} suspenso(s)` : undefined} />
-            <StatPill value={ind.audienciasHoje ?? 0} label="Compromissos Hoje" borderColor="#60a5fa" />
-            <StatPill value={ind.prazosProximos ?? 0} label="Prazos na Semana" borderColor="var(--warning)"
+            <StatPill value={ind.audienciasHoje ?? 0} label="Compromissos Hoje" borderColor="#3b82f6" tint="#3b82f6" />
+            <StatPill value={ind.prazosProximos ?? 0} label="Prazos na Semana" borderColor="#f97316" tint="#f97316"
               sub={ind.prazosVencidos > 0 ? `${ind.prazosVencidos} vencido(s)!` : undefined} />
           </div>
         </DashCard>
@@ -401,57 +420,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Parcelas list */}
-          {(honorarios.parcelas?.length > 0) ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {honorarios.parcelas.slice(0, 5).map(p => {
-                const venc = new Date(p.vencimento);
-                const vencStr = venc.toISOString().slice(0, 10);
-                const isPago = p.status === 'PAGO';
-                const isAtrasado = !isPago && vencStr < todayStr;
-                const isHoje = vencStr === todayStr;
-
-                let statusHtml;
-                if (isPago) {
-                  statusHtml = <span style={{ color: 'var(--success)' }}><i className="fas fa-check-circle" /> Recebido</span>;
-                } else if (isAtrasado) {
-                  const diff = Math.floor((new Date(todayStr + 'T00:00') - new Date(vencStr + 'T00:00')) / 86400000);
-                  statusHtml = <span style={{ color: 'var(--danger)' }}><i className="fas fa-exclamation-circle" /> Atrasado ha {diff} dias</span>;
-                } else if (isHoje) {
-                  statusHtml = <span style={{ color: 'var(--warning)' }}><i className="fas fa-clock" /> Vence hoje</span>;
-                } else {
-                  statusHtml = <span style={{ color: 'var(--accent)' }}><i className="fas fa-clock" /> Pendente</span>;
-                }
-
-                return (
-                  <div key={p.id} style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    padding: '12px 16px', background: 'rgba(255,255,255,.03)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-                    border: '1px solid var(--border)', borderRadius: 12,
-                  }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14 }}>{p.processoNome || p.processoNumero}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{p.descricao || 'Honorario'}</div>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14 }}>{formatarMoeda(p.valor)}</div>
-                      <div style={{ fontSize: 11 }}>
-                        {statusHtml}
-                        <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>
-                          · {venc.getDate()} {MONTHS[venc.getMonth()]}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '16px', color: 'var(--text-muted)', fontSize: 12 }}>
-              <i className="fas fa-file-invoice-dollar" style={{ fontSize: 22, marginBottom: 8, display: 'block', opacity: .4 }} />
-              Nenhum honorario cadastrado.
-            </div>
-          )}
         </DashCard>
 
         {/* ═══ ROW 4: Calendário Semanal (full) ════════════════════ */}

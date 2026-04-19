@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a2544"/>
+      <stop offset="100%" stop-color="#0a1128"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#b8893d"/>
+    </linearGradient>
+  </defs>
+  <!-- fundo -->
+  <rect width="120" height="120" fill="url(#bg)"/>
+  <!-- cabeça -->
+  <circle cx="60" cy="46" r="18" fill="#e8d5b7"/>
+  <!-- cabelo -->
+  <path d="M42 44 Q42 28 60 28 Q78 28 78 44 Q78 38 74 36 Q70 32 60 32 Q50 32 46 36 Q42 38 42 44 Z" fill="#2a2018"/>
+  <!-- ombros / terno -->
+  <path d="M22 120 Q22 82 42 76 L78 76 Q98 82 98 120 Z" fill="#14213d"/>
+  <!-- camisa (V) -->
+  <path d="M50 76 L60 96 L70 76 Z" fill="#f8fafc"/>
+  <!-- gravata -->
+  <path d="M56 82 L60 92 L64 82 L62 78 L58 78 Z" fill="url(#gold)"/>
+  <path d="M58 92 L60 108 L62 92 Z" fill="url(#gold)"/>
+  <!-- lapelas -->
+  <path d="M42 78 L50 76 L60 96 L52 88 Z" fill="#0f172a"/>
+  <path d="M78 78 L70 76 L60 96 L68 88 Z" fill="#0f172a"/>
+  <!-- pin balança da justiça -->
+  <circle cx="48" cy="92" r="3" fill="url(#gold)"/>
+  <path d="M46 92 L50 92 M48 92 L48 95" stroke="#0a1128" stroke-width="0.6" stroke-linecap="round"/>
+</svg>

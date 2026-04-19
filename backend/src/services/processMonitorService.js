@@ -144,24 +144,39 @@ async function verificarProcesso(processo) {
   logger.info(`🔔 Process Monitor: ${novas.length} nova(s) movimentação(ões) em ${processo.numeroCnj}`);
 
   // Salva movimentações novas (evita duplicatas via hashExterno)
+  // IMPORTANTE: escopar o hashExterno por processoId para evitar colisões globais
+  // entre processos diferentes que referenciem a mesma movimentação.
   let salvas = 0;
   for (const mov of novas) {
     try {
-      await prisma.movimentacao.upsert({
-        where: { hashExterno: mov.hashExterno },
-        update: {},
-        create: {
+      const baseHash = mov.hashExterno || `${mov.origemApi || 'auto'}_${new Date(mov.data).getTime()}_${(mov.descricao || '').slice(0, 80)}`;
+      const hashScoped = baseHash.startsWith(`${processo.id}_`)
+        ? baseHash
+        : `${processo.id}_${baseHash}`;
+
+      // Verifica se já existe antes do upsert (mais seguro que try/catch silencioso)
+      const existente = await prisma.movimentacao.findFirst({
+        where: { processoId: processo.id, hashExterno: hashScoped },
+        select: { id: true },
+      });
+      if (existente) continue;
+
+      await prisma.movimentacao.create({
+        data: {
           processoId: processo.id,
           data: mov.data,
           descricao: mov.descricao,
           tipo: mov.tipo,
           origemApi: mov.origemApi || 'datajud',
-          hashExterno: mov.hashExterno,
+          hashExterno: hashScoped,
         },
       });
       salvas++;
-    } catch (_) {
-      // Ignore duplicatas silenciosamente
+    } catch (e) {
+      // Só loga em nível warn — não quebra o ciclo por uma movimentação problemática
+      if (e.code !== 'P2002') {
+        logger.warn(`Process Monitor: falha ao salvar movimentação em ${processo.numeroCnj}: ${e.message}`);
+      }
     }
   }
 

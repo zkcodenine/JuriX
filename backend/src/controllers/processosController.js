@@ -6,11 +6,19 @@ const notificationService = require('../services/notificationService');
 // ─── Listar processos ──────────────────────────────
 async function listar(req, res, next) {
   try {
-    const { status, busca, pagina = 1, limite = 20, ordem = 'desc' } = req.query;
+    const { status, busca, pagina = 1, limite = 20, ordem = 'desc', incluirArquivados, apenasArquivados } = req.query;
     const skip = (Number(pagina) - 1) * Number(limite);
 
     const where = { usuarioId: req.usuario.id };
-    if (status) where.status = status;
+    if (status) {
+      where.status = status;
+    } else if (apenasArquivados === 'true' || apenasArquivados === '1') {
+      // Apenas processos arquivados
+      where.status = 'ARQUIVADO';
+    } else if (incluirArquivados !== 'true' && incluirArquivados !== '1') {
+      // Por padrão, oculta processos ARQUIVADOS da lista principal
+      where.status = { not: 'ARQUIVADO' };
+    }
     if (busca) {
       where.OR = [
         { numero: { contains: busca, mode: 'insensitive' } },
@@ -221,10 +229,25 @@ async function importarCNJ(req, res, next) {
       }
     }
 
-    // Consulta DataJud
-    const dadosCNJ = await datajudService.consultarProcesso(numeroCnj, tribunal);
+    // Consulta DataJud (com fallback manual se permitirManual=true)
+    const { permitirManual } = req.body;
+    let dadosCNJ = await datajudService.consultarProcesso(numeroCnj, tribunal);
     if (!dadosCNJ) {
-      return res.status(404).json({ error: 'Processo não encontrado no DataJud.' });
+      if (!permitirManual) {
+        return res.status(404).json({
+          error: 'Processo não encontrado no DataJud.',
+          podeImportarManual: true,
+        });
+      }
+      // Fallback: cria processo com dados mínimos (usuário edita depois)
+      dadosCNJ = {
+        numero: numeroCnj,
+        numeroCnj,
+        tribunal,
+        vara: null, classe: null, assunto: null,
+        dataDistribuicao: null,
+        partes: [], advogados: [], movimentacoes: [],
+      };
     }
 
     // Verifica se já existe — busca por numeroCnj exato OU apenas dígitos para evitar duplicatas por formatação
@@ -296,39 +319,19 @@ async function importarCNJ(req, res, next) {
             monitoramentoAtivo: true,
             observacoes: `CNJ: ${numeroCnj}`,
             partes: dadosCNJ.partes?.length ? {
-              create: dadosCNJ.partes.map(p => ({
-                nome: p.nome,
-                tipo: mapearTipoParte(p.tipo),
-              })),
+              create: dadosCNJ.partes.map(p => ({ nome: p.nome, tipo: mapearTipoParte(p.tipo) })),
             } : undefined,
             advogados: dadosCNJ.advogados?.length ? {
-              create: dadosCNJ.advogados.map(a => ({
-                nome: a.nome,
-                oab: a.numeroDocumentoPrincipal,
-              })),
-            } : undefined,
-            movimentacoes: dadosCNJ.movimentacoes?.length ? {
-              create: (() => {
-                const seen = new Set();
-                return dadosCNJ.movimentacoes
-                  .filter(m => m.data)
-                  .map((m, idx) => {
-                    let hash = m.hashExterno || `cnj_${cnjDigits}_${m.data}`;
-                    if (seen.has(hash)) hash = `${hash}_${idx}`;
-                    seen.add(hash);
-                    return {
-                      data: new Date(m.data),
-                      descricao: m.descricao || 'Movimentação',
-                      tipo: m.tipo || null,
-                      origemApi: 'datajud',
-                      hashExterno: hash,
-                    };
-                  });
-              })(),
+              create: dadosCNJ.advogados.map(a => ({ nome: a.nome, oab: a.numeroDocumentoPrincipal })),
             } : undefined,
           },
-          include: { partes: true, advogados: true, movimentacoes: { take: 5 } },
+          include: { partes: true, advogados: true },
         });
+
+        // Salva movimentações individualmente para evitar falha por hash duplicado
+        if (dadosCNJ.movimentacoes?.length) {
+          await _salvarMovimentacoes(processo.id, dadosCNJ.movimentacoes, numeroCnj);
+        }
 
         await notificationService.criarNotificacao({
           usuarioId: req.usuario.id,
@@ -342,7 +345,7 @@ async function importarCNJ(req, res, next) {
       }
     }
 
-    // Cria o processo com dados do CNJ
+    // Cria o processo com dados do CNJ (sem nested movimentacoes para evitar falha por hash duplicado)
     const processo = await prisma.processo.create({
       data: {
         usuarioId: req.usuario.id,
@@ -357,47 +360,26 @@ async function importarCNJ(req, res, next) {
         origemDados: 'datajud',
         monitoramentoAtivo: true,
         partes: dadosCNJ.partes?.length ? {
-          create: dadosCNJ.partes.map(p => ({
-            nome: p.nome,
-            tipo: mapearTipoParte(p.tipo),
-          })),
+          create: dadosCNJ.partes.map(p => ({ nome: p.nome, tipo: mapearTipoParte(p.tipo) })),
         } : undefined,
         advogados: dadosCNJ.advogados?.length ? {
-          create: dadosCNJ.advogados.map(a => ({
-            nome: a.nome,
-            oab: a.numeroDocumentoPrincipal,
-          })),
-        } : undefined,
-        movimentacoes: dadosCNJ.movimentacoes?.length ? {
-          create: (() => {
-            const seen = new Set();
-            return dadosCNJ.movimentacoes
-              .filter(m => m.data)
-              .map((m, idx) => {
-                // Garante hash único mesmo com movimentações no mesmo instante
-                let hash = m.hashExterno || `cnj_${numeroCnj.replace(/\D/g, '')}_${m.data}`;
-                if (seen.has(hash)) hash = `${hash}_${idx}`;
-                seen.add(hash);
-                return {
-                  data: new Date(m.data),
-                  descricao: m.descricao || 'Movimentação',
-                  tipo: m.tipo || null,
-                  origemApi: 'datajud',
-                  hashExterno: hash,
-                };
-              });
-          })(),
+          create: dadosCNJ.advogados.map(a => ({ nome: a.nome, oab: a.numeroDocumentoPrincipal })),
         } : undefined,
       },
-      include: { partes: true, advogados: true, movimentacoes: { take: 5 } },
+      include: { partes: true, advogados: true },
     });
+
+    // Salva movimentações individualmente para evitar falha por hash duplicado
+    const movsSalvas = dadosCNJ.movimentacoes?.length
+      ? await _salvarMovimentacoes(processo.id, dadosCNJ.movimentacoes, numeroCnj)
+      : 0;
 
     // Notificação de importação
     await notificationService.criarNotificacao({
       usuarioId: req.usuario.id,
       processoId: processo.id,
       titulo: 'Processo importado do DataJud/CNJ',
-      mensagem: `Processo ${dadosCNJ.numero || numeroCnj} importado com sucesso. ${dadosCNJ.movimentacoes?.length || 0} movimentação(ões) registrada(s). Monitoramento automático ativado.`,
+      mensagem: `Processo ${dadosCNJ.numero || numeroCnj} importado com sucesso. ${movsSalvas} movimentação(ões) registrada(s). Monitoramento automático ativado.`,
       tipo: 'SISTEMA',
     });
 
@@ -463,26 +445,9 @@ async function confirmarVinculacaoCNJ(req, res, next) {
       }
     }
 
-    // Adiciona movimentações novas (sem duplicar via upsert no hashExterno)
+    // Adiciona movimentações novas (dedup por hash scoped por processoId)
     if (dadosCNJ.movimentacoes?.length) {
-      for (const m of dadosCNJ.movimentacoes) {
-        if (!m.data) continue;
-        const hash = m.hashExterno || `cnj_${numeroCnj.replace(/\D/g, '')}_${m.data}`;
-        try {
-          await prisma.movimentacao.upsert({
-            where: { hashExterno: hash },
-            update: {},
-            create: {
-              processoId: req.params.id,
-              data: new Date(m.data),
-              descricao: m.descricao || 'Movimentação',
-              tipo: m.tipo || null,
-              origemApi: m.origemApi || 'datajud',
-              hashExterno: hash,
-            },
-          });
-        } catch (_) { /* duplicata silenciosa */ }
-      }
+      await _salvarMovimentacoes(req.params.id, dadosCNJ.movimentacoes, numeroCnj);
     }
 
     // Notificação de vinculação
@@ -750,6 +715,44 @@ function mapearTipoParte(tipo) {
   return mapa[tipo] || 'TERCEIRO';
 }
 
+// ─── Salvar movimentações individualmente (dedup via hash + processoId) ──
+async function _salvarMovimentacoes(processoId, movimentacoes, numeroCnj) {
+  const cnjDigits = (numeroCnj || '').replace(/\D/g, '');
+  let salvas = 0;
+  const seen = new Set();
+  for (let idx = 0; idx < movimentacoes.length; idx++) {
+    const m = movimentacoes[idx];
+    if (!m.data) continue;
+    // Hash inclui processoId para evitar colisão entre processos de usuários diferentes
+    let base = m.hashExterno || `cnj_${cnjDigits}_${m.data}`;
+    let hash = `${processoId}_${base}`;
+    // Garante unicidade dentro do próprio lote
+    if (seen.has(hash)) hash = `${hash}_${idx}`;
+    seen.add(hash);
+    try {
+      await prisma.movimentacao.upsert({
+        where: { hashExterno: hash },
+        update: {},
+        create: {
+          processoId,
+          data: new Date(m.data),
+          descricao: String(m.descricao || 'Movimentação').slice(0, 500),
+          tipo: m.tipo ? String(m.tipo).slice(0, 255) : null,
+          origemApi: m.origemApi || 'datajud',
+          hashExterno: hash,
+        },
+      });
+      salvas++;
+    } catch (e) {
+      if (e.code !== 'P2002') {
+        const logger = require('../config/logger');
+        logger.warn(`_salvarMovimentacoes: erro ignorado - ${e.message}`);
+      }
+    }
+  }
+  return salvas;
+}
+
 // ─── Sincronizar movimentações de um processo (sync completo) ──
 async function sincronizarMovimentacoes(req, res, next) {
   try {
@@ -772,43 +775,41 @@ async function sincronizarMovimentacoes(req, res, next) {
       movimentacoes = await datajudService.verificarMovimentacoes(processo.numeroCnj, tribunal, null);
     }
 
-    // Salva com dedup via hashExterno (upsert)
-    let salvas = 0;
-    let erros = 0;
-    for (const mov of movimentacoes) {
-      // Valida dados antes de persistir
-      if (!mov.hashExterno || !mov.data || !mov.descricao) {
-        erros++;
-        continue;
-      }
-      try {
-        await prisma.movimentacao.upsert({
-          where: { hashExterno: mov.hashExterno },
-          update: {},
-          create: {
-            processoId: processo.id,
-            data: new Date(mov.data),
-            descricao: String(mov.descricao).slice(0, 500),
-            tipo: mov.tipo ? String(mov.tipo).slice(0, 255) : null,
-            origemApi: mov.origemApi || 'datajud',
-            hashExterno: mov.hashExterno,
-          },
-        });
-        salvas++;
-      } catch (e) {
-        // P2002 = duplicata, ignora silenciosamente
-        if (e.code !== 'P2002') {
-          erros++;
-        }
-      }
-    }
+    // Salva com dedup via hash scoped por processoId
+    const salvas = await _salvarMovimentacoes(processo.id, movimentacoes, processo.numeroCnj);
 
-    // Atualiza timestamp apenas se houve novas movimentações
+    // Atualiza timestamp e gera notificação se houve novas movimentações
     if (salvas > 0) {
       await prisma.processo.update({
         where: { id: processo.id },
         data: { dataUltimaAtualizacao: new Date() },
       });
+
+      // Notifica o usuário sobre as novas movimentações capturadas na sync manual
+      try {
+        const notificationService = require('../services/notificationService');
+        const maisRecente = [...movimentacoes]
+          .filter(m => m.data)
+          .sort((a, b) => new Date(b.data) - new Date(a.data))[0];
+        const descricaoPrincipal = maisRecente?.descricao || 'Atualização detectada';
+        const fonte = maisRecente?.origemApi === 'tjmg'
+          ? ' (TJMG)'
+          : maisRecente?.origemApi === 'datajud'
+            ? ' (DataJud)'
+            : '';
+        await notificationService.criarNotificacao({
+          usuarioId: processo.usuarioId,
+          processoId: processo.id,
+          titulo: `${salvas} nova${salvas > 1 ? 's' : ''} movimentação${salvas > 1 ? 'ões' : ''}${fonte}`,
+          mensagem: salvas > 1
+            ? `${salvas} novas movimentações sincronizadas no processo ${processo.numero || processo.numeroCnj}. Mais recente: ${String(descricaoPrincipal).slice(0, 200)}`
+            : `Nova movimentação sincronizada no processo ${processo.numero || processo.numeroCnj}: ${String(descricaoPrincipal).slice(0, 200)}`,
+          tipo: 'MOVIMENTACAO',
+        });
+      } catch (notifErr) {
+        const logger = require('../config/logger');
+        logger.warn(`sincronizarMovimentacoes: falha ao criar notificação - ${notifErr.message}`);
+      }
     }
 
     const totalDb = await prisma.movimentacao.count({ where: { processoId: processo.id } });
@@ -838,7 +839,7 @@ async function movimentacoesAgenda(req, res, next) {
         },
       },
       orderBy: { data: 'desc' },
-      take: 500,
+      take: 2000,
     });
     res.json(movimentacoes);
   } catch (err) { next(err); }
@@ -882,7 +883,10 @@ async function sincronizarTodos(req, res, next) {
     }
 
     const tribunalRegistry = require('../services/tribunalRegistry');
+    const notificationService = require('../services/notificationService');
+    const logger = require('../config/logger');
     let totalNovas = 0;
+    let processosAtualizados = 0;
 
     for (const processo of processos) {
       try {
@@ -896,41 +900,49 @@ async function sincronizarTodos(req, res, next) {
           movimentacoes = await datajudService.verificarMovimentacoes(processo.numeroCnj, tribunal, null);
         }
 
-        let novasDesteProcesso = 0;
-        for (const mov of movimentacoes) {
-          if (!mov.hashExterno || !mov.data || !mov.descricao) continue;
-          try {
-            await prisma.movimentacao.upsert({
-              where: { hashExterno: mov.hashExterno },
-              update: {},
-              create: {
-                processoId: processo.id,
-                data: new Date(mov.data),
-                descricao: String(mov.descricao).slice(0, 500),
-                tipo: mov.tipo ? String(mov.tipo).slice(0, 255) : null,
-                origemApi: mov.origemApi || 'datajud',
-                hashExterno: mov.hashExterno,
-              },
-            });
-            novasDesteProcesso++;
-            totalNovas++;
-          } catch (e) {
-            if (e.code !== 'P2002') continue;
-          }
-        }
+        const novasDesteProcesso = await _salvarMovimentacoes(processo.id, movimentacoes, processo.numeroCnj);
+        totalNovas += novasDesteProcesso;
 
-        // Atualiza timestamp apenas se houve novas movimentações neste processo
+        // Atualiza timestamp e notifica se houve novas movimentações neste processo
         if (novasDesteProcesso > 0) {
+          processosAtualizados++;
           await prisma.processo.update({
             where: { id: processo.id },
             data: { dataUltimaAtualizacao: new Date() },
           });
+
+          try {
+            const procInfo = await prisma.processo.findUnique({
+              where: { id: processo.id },
+              select: { numero: true, numeroCnj: true },
+            });
+            const maisRecente = [...movimentacoes]
+              .filter(m => m.data)
+              .sort((a, b) => new Date(b.data) - new Date(a.data))[0];
+            const descricaoPrincipal = maisRecente?.descricao || 'Atualização detectada';
+            const fonte = maisRecente?.origemApi === 'tjmg'
+              ? ' (TJMG)'
+              : maisRecente?.origemApi === 'datajud'
+                ? ' (DataJud)'
+                : '';
+            await notificationService.criarNotificacao({
+              usuarioId: req.usuario.id,
+              processoId: processo.id,
+              titulo: `${novasDesteProcesso} nova${novasDesteProcesso > 1 ? 's' : ''} movimentação${novasDesteProcesso > 1 ? 'ões' : ''}${fonte}`,
+              mensagem: novasDesteProcesso > 1
+                ? `${novasDesteProcesso} novas movimentações sincronizadas no processo ${procInfo?.numero || procInfo?.numeroCnj}. Mais recente: ${String(descricaoPrincipal).slice(0, 200)}`
+                : `Nova movimentação sincronizada no processo ${procInfo?.numero || procInfo?.numeroCnj}: ${String(descricaoPrincipal).slice(0, 200)}`,
+              tipo: 'MOVIMENTACAO',
+            });
+          } catch (notifErr) {
+            logger.warn(`sincronizarTodos: falha ao notificar processo ${processo.id} - ${notifErr.message}`);
+          }
         }
 
         // Rate limit between processes
         await new Promise(r => setTimeout(r, 500));
-      } catch {
-        // Skip individual process errors
+      } catch (err) {
+        logger.warn(`sincronizarTodos: erro no processo ${processo.id} - ${err.message}`);
         continue;
       }
     }
@@ -938,6 +950,7 @@ async function sincronizarTodos(req, res, next) {
     res.json({
       mensagem: 'Sincronização concluída.',
       total: processos.length,
+      processosAtualizados,
       atualizados: totalNovas,
     });
   } catch (err) { next(err); }

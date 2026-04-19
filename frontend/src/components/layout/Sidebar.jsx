@@ -1,7 +1,9 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import useAuthStore from '../../store/authStore';
+import useThemeStore from '../../store/themeStore';
 import { getIniciais } from '../../utils/formatters';
+const DEFAULT_AVATAR = '/default-avatar.svg';
 import PerfilModal from '../perfil/PerfilModal';
 
 const navItems = [
@@ -77,6 +79,7 @@ function NavItem({ item, collapsed, naoLidas = 0, badgeCount = 0 }) {
 
 export default function Sidebar({ naoLidas = 0, processosAlertas = 0, onCollapse }) {
   const { usuario, logout } = useAuthStore();
+  const { theme, toggleTheme } = useThemeStore();
   const [collapsed, setCollapsed]   = useState(false);
   const [showPerfil, setShowPerfil] = useState(false);
   const [hoverCard, setHoverCard]   = useState(false);
@@ -85,9 +88,23 @@ export default function Sidebar({ naoLidas = 0, processosAlertas = 0, onCollapse
   const plano = usuario?.plano || 'GRATUITO';
   const ps    = planBadge[plano] || planBadge.GRATUITO;
 
-  const avatarBase = usuario?.avatar ? `${window.location.origin.replace(':3000', ':3001')}${usuario.avatar}` : null;
-  // Cache-bust to force reload after avatar change (avatar path stays the same)
-  const avatarUrl = avatarBase ? `${avatarBase}?v=${usuario?._avatarTs || ''}` : null;
+  // Build avatar URL — detecta se frontend está em :3000 (Vite dev) e aponta p/ backend :3001
+  const buildAvatarUrl = (path) => {
+    if (!path) return null;
+    if (/^https?:/i.test(path)) return path;
+    const origin = window.location.port === '3000'
+      ? window.location.origin.replace(':3000', ':3001')
+      : window.location.origin;
+    return `${origin}${path.startsWith('/') ? '' : '/'}${path}`;
+  };
+  const avatarBase = buildAvatarUrl(usuario?.avatar);
+  // Cache-buster estável: atualiza apenas quando avatar muda ou upload novo
+  const avatarUrl = useMemo(() => {
+    if (!avatarBase) return null;
+    return usuario?._avatarTs
+      ? `${avatarBase}?v=${usuario._avatarTs}`
+      : avatarBase;
+  }, [avatarBase, usuario?._avatarTs]);
 
   return (
     <>
@@ -105,7 +122,7 @@ export default function Sidebar({ naoLidas = 0, processosAlertas = 0, onCollapse
         {/* ─── LOGO ────────────────────────────────── */}
         <div
           className="flex items-center gap-3 px-4 flex-shrink-0"
-          style={{ height: 64, borderBottom: '1px solid rgba(255,255,255,.04)' }}
+          style={{ height: 64, borderBottom: '1px solid var(--border)' }}
         >
           <div
             className="flex items-center justify-center flex-shrink-0 overflow-hidden rounded-xl"
@@ -133,7 +150,7 @@ export default function Sidebar({ naoLidas = 0, processosAlertas = 0, onCollapse
         </div>
 
         {/* ─── USER CARD ──────────────────────────── */}
-        <div className="px-3 py-3 flex-shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,.04)' }}>
+        <div className="px-3 py-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
           {!collapsed ? (
             <div
               className="rounded-xl p-3 cursor-pointer transition-all duration-300"
@@ -158,14 +175,16 @@ export default function Sidebar({ naoLidas = 0, processosAlertas = 0, onCollapse
                       boxShadow: hoverCard ? '0 0 12px rgba(0,0,0,.3)' : 'none',
                     }}
                   >
-                    {avatarUrl
-                      ? <img src={avatarUrl} alt="avatar" className="w-full h-full object-cover" />
-                      : getIniciais(usuario?.nome)
-                    }
+                    <img
+                      src={avatarUrl || DEFAULT_AVATAR}
+                      alt="avatar"
+                      className="w-full h-full object-cover"
+                      onError={(e) => { e.currentTarget.src = DEFAULT_AVATAR; }}
+                    />
                   </div>
                   <span
                     className="absolute -bottom-0.5 -right-0.5 rounded-full border-2"
-                    style={{ width: 10, height: 10, background: '#22c55e', borderColor: 'rgba(10,17,40,.85)' }}
+                    style={{ width: 10, height: 10, background: '#22c55e', borderColor: 'var(--bg-primary)' }}
                   />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -203,14 +222,16 @@ export default function Sidebar({ naoLidas = 0, processosAlertas = 0, onCollapse
                   className="flex items-center justify-center font-bold overflow-hidden transition-all duration-300 hover:shadow-gold"
                   style={{ width: 40, height: 40, borderRadius: 8, background: 'linear-gradient(135deg,#facc15,#eab308)', color: '#0c0c0e', fontSize: 13 }}
                 >
-                  {avatarUrl
-                    ? <img src={avatarUrl} alt="avatar" className="w-full h-full object-cover" />
-                    : getIniciais(usuario?.nome)
-                  }
+                  <img
+                    src={avatarUrl || DEFAULT_AVATAR}
+                    alt="avatar"
+                    className="w-full h-full object-cover"
+                    onError={(e) => { e.currentTarget.src = DEFAULT_AVATAR; }}
+                  />
                 </div>
                 <span
                   className="absolute -bottom-0.5 -right-0.5 rounded-full border-2"
-                  style={{ width: 10, height: 10, background: '#22c55e', borderColor: 'rgba(10,17,40,.85)' }}
+                  style={{ width: 10, height: 10, background: '#22c55e', borderColor: 'var(--bg-primary)' }}
                 />
               </div>
             </div>
@@ -229,7 +250,7 @@ export default function Sidebar({ naoLidas = 0, processosAlertas = 0, onCollapse
             <NavItem key={item.path} item={item} collapsed={collapsed} naoLidas={naoLidas} badgeCount={item.path === '/processos' ? processosAlertas : 0} />
           ))}
 
-          <div className="my-2 mx-1" style={{ height: 1, background: 'rgba(255,255,255,.04)' }} />
+          <div className="my-2 mx-1" style={{ height: 1, background: 'var(--border)' }} />
 
           {!collapsed && (
             <p className="text-[10px] font-bold uppercase tracking-widest px-3 mb-1.5" style={{ color: 'var(--text-muted)' }}>
@@ -238,6 +259,7 @@ export default function Sidebar({ naoLidas = 0, processosAlertas = 0, onCollapse
           )}
 
           <NavItem item={{ path: '/planos', icon: 'fa-crown', label: 'Planos' }} collapsed={collapsed} />
+
 
         </nav>
       </aside>
