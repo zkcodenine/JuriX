@@ -110,14 +110,17 @@ async function startBackend() {
     backendProcess.stderr?.on('data', (d) => log.warn('[Backend]', d.toString().trim()))
 
     backendProcess.on('exit', (code) => {
-      if (!app.isQuitting) {
-        log.error('[Main] Backend encerrou com código', code)
-        dialog.showErrorBox(
-          'Erro — JuriX',
-          `O servidor interno parou (código ${code}).\n\nVerifique sua conexão com a internet e abra o aplicativo novamente.`
-        )
-        app.exit(1)
+      // Se estamos saindo (quit normal ou update) — ignora silenciosamente
+      if (app.isQuitting || global.__jurixUpdating) {
+        log.info('[Main] Backend encerrado durante shutdown/update (esperado)')
+        return
       }
+      log.error('[Main] Backend encerrou com código', code)
+      dialog.showErrorBox(
+        'Erro — JuriX',
+        `O servidor interno parou (código ${code}).\n\nVerifique sua conexão com a internet e abra o aplicativo novamente.`
+      )
+      app.exit(1)
     })
 
     // Aguarda /health responder (máx 45 s)
@@ -226,10 +229,45 @@ function createMainWindow() {
   return mainWindow
 }
 
+// ── Shutdown limpo para atualização ────────────────────────────────────────
+// Usado pelo updater.js antes de chamar quitAndInstall. Evita o handler
+// "backend exit" disparar showErrorBox + app.exit(1), que cancelava o installer.
+global.__jurixUpdating = false
+global.__jurixShutdownForUpdate = async function () {
+  log.info('[Main] Shutdown para atualização — matando backend e janelas')
+  global.__jurixUpdating = true
+  app.isQuitting = true
+
+  // Mata backend antes do quitAndInstall para garantir que a porta 3001 libere
+  if (backendProcess) {
+    try { backendProcess.kill() } catch (_) {}
+    backendProcess = null
+  }
+  try {
+    const { execSync } = require('child_process')
+    if (process.platform === 'win32') {
+      execSync(
+        `FOR /F "tokens=5" %P IN ('netstat -ano ^| findstr :${BACKEND_PORT}') DO taskkill /F /PID %P`,
+        { windowsHide: true, shell: true }
+      )
+    }
+  } catch (_) {}
+
+  // Fecha as janelas
+  for (const w of BrowserWindow.getAllWindows()) {
+    try { w.removeAllListeners('close'); w.destroy() } catch (_) {}
+  }
+
+  // Pequena espera para garantir que o backend saiu
+  await new Promise((r) => setTimeout(r, 400))
+}
+
 // ── IPC: instalar atualização ─────────────────────────────────────────────────
 ipcMain.on('updater-action', (_e, action) => {
   if (action === 'install') {
-    require('electron-updater').autoUpdater.quitAndInstall(false, true)
+    global.__jurixShutdownForUpdate().then(() =>
+      require('electron-updater').autoUpdater.quitAndInstall(true, true)
+    )
   }
 })
 

@@ -140,13 +140,21 @@ function setupAutoUpdater(mainWindow) {
 
     const parentWin = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
 
-    const doInstall = () => {
+    const doInstall = async () => {
       if (isQuittingToInstall) return
       isQuittingToInstall = true
-      log.info('[Updater] Quitting and installing silently...')
-      // isSilent=true, isForceRunAfter=true
+      log.info('[Updater] Shutdown limpo + quitAndInstall silencioso...')
+      try {
+        // Sinaliza shutdown para o handler "backend exit" não cancelar a instalação
+        if (typeof global.__jurixShutdownForUpdate === 'function') {
+          await global.__jurixShutdownForUpdate()
+        }
+      } catch (err) {
+        log.warn('[Updater] Shutdown helper failed:', err.message)
+      }
       setImmediate(() => {
         try {
+          // isSilent=true (NSIS oneClick), isForceRunAfter=true (reabre após instalar)
           autoUpdater.quitAndInstall(true, true)
         } catch (err) {
           log.error('[Updater] quitAndInstall failed:', err.message)

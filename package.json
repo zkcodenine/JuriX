@@ -1,6 +1,6 @@
 {
   "name": "jurix",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "description": "JuriX — Sistema de Gestão Jurídica",
   "main": "electron/main.js",
   "author": {
