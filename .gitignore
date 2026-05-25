@@ -22,6 +22,9 @@ electron/assets/logo-original.*
 # User uploads
 storage/
 
+# Data migration dumps (Supabase → HostGator)
+backup/
+
 # Claude Code
 .claude/
 

@@ -19,11 +19,12 @@ Write-Host ""
 Write-Host "  Aplicando migrations..." -ForegroundColor DarkGray
 npx prisma migrate deploy
 if ($LASTEXITCODE -ne 0) {
-    # Tenta db push como alternativa (para Supabase/projetos novos)
+    # Tenta db push como alternativa (projetos novos / HostGator sem migrations versionadas)
     Write-Host "  Tentando prisma db push..." -ForegroundColor Yellow
     npx prisma db push
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "  ✗ Falha nas migrations. Verifique o DATABASE_URL no backend\.env" -ForegroundColor Red
+        Write-Host "  ✗ Falha nas migrations. Verifique o DATABASE_URL (MySQL HostGator) no backend\.env" -ForegroundColor Red
+        Write-Host "  Confirme tambem que o IP atual esta liberado em cPanel > Remote MySQL" -ForegroundColor Yellow
         Set-Location ..
         exit 1
     }

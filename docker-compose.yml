@@ -1,23 +1,25 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: jurix_postgres
+  mysql:
+    image: mysql:8.0
+    container_name: jurix_mysql
     restart: unless-stopped
     environment:
-      POSTGRES_DB: jurix
-      POSTGRES_USER: jurix_user
-      POSTGRES_PASSWORD: jurix_secret_2024
+      MYSQL_DATABASE: jurix
+      MYSQL_USER: jurix_user
+      MYSQL_PASSWORD: jurix_secret_2024
+      MYSQL_ROOT_PASSWORD: root_secret_2024
     ports:
-      - "5432:5432"
+      - "3306:3306"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U jurix_user -d jurix"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_secret_2024"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
 
   redis:
     image: redis:7-alpine
@@ -44,7 +46,7 @@ services:
       - "3001:3001"
     environment:
       NODE_ENV: development
-      DATABASE_URL: postgresql://jurix_user:jurix_secret_2024@postgres:5432/jurix
+      DATABASE_URL: mysql://jurix_user:jurix_secret_2024@mysql:3306/jurix
       REDIS_URL: redis://redis:6379
       JWT_SECRET: jurix_jwt_secret_super_seguro_2024
       PORT: 3001
@@ -52,7 +54,7 @@ services:
       - ./storage:/app/storage
       - ./backend/src:/app/src
     depends_on:
-      postgres:
+      mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -71,5 +73,5 @@ services:
       - backend
 
 volumes:
-  postgres_data:
+  mysql_data:
   redis_data:

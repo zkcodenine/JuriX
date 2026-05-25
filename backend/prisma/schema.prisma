@@ -1,6 +1,6 @@
 // ══════════════════════════════════════════════════
 //  JuriX — Prisma Schema
-//  Banco: PostgreSQL
+//  Banco: MySQL (HostGator)
 // ══════════════════════════════════════════════════
 
 generator client {
@@ -8,9 +8,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")       // Optional: Supabase direct connection (bypasses pgBouncer for migrations)
+  provider = "mysql"
+  url      = env("DATABASE_URL")
 }
 
 // ─── Usuários ──────────────────────────────────────

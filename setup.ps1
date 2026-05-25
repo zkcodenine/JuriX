@@ -52,22 +52,27 @@ Set-Location ..
 
 # ─── Instrução banco de dados ─────────────────────
 Write-Host ""
-Write-Host "  [4/4] Configuração do banco de dados" -ForegroundColor Cyan
+Write-Host "  [4/4] Configuração do banco de dados (HostGator MySQL)" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "  ┌─────────────────────────────────────────────────────┐" -ForegroundColor DarkGray
-Write-Host "  │  IMPORTANTE: Configure o DATABASE_URL no arquivo:   │" -ForegroundColor Yellow
-Write-Host "  │  backend\.env                                        │" -ForegroundColor Yellow
-Write-Host "  │                                                       │" -ForegroundColor DarkGray
-Write-Host "  │  Opção gratuita recomendada: Supabase                │" -ForegroundColor Cyan
-Write-Host "  │  1. Acesse: https://supabase.com                     │" -ForegroundColor White
-Write-Host "  │  2. Crie um projeto                                  │" -ForegroundColor White
-Write-Host "  │  3. Settings > Database > Connection string (URI)    │" -ForegroundColor White
-Write-Host "  │  4. Cole no DATABASE_URL do backend\.env             │" -ForegroundColor White
-Write-Host "  └─────────────────────────────────────────────────────┘" -ForegroundColor DarkGray
+Write-Host "  ┌───────────────────────────────────────────────────────────┐" -ForegroundColor DarkGray
+Write-Host "  │  Banco: MySQL HostGator                                   │" -ForegroundColor Yellow
+Write-Host "  │                                                            │" -ForegroundColor DarkGray
+Write-Host "  │  1. cPanel HostGator > MySQL Databases:                   │" -ForegroundColor White
+Write-Host "  │     - Crie o banco (ex: cpaneluser_jurix)                 │" -ForegroundColor White
+Write-Host "  │     - Crie o usuário e associe ao banco com ALL PRIVS     │" -ForegroundColor White
+Write-Host "  │                                                            │" -ForegroundColor DarkGray
+Write-Host "  │  2. cPanel > Remote MySQL:                                │" -ForegroundColor White
+Write-Host "  │     - Adicione o IP do servidor JuriX (ou % para qualquer)│" -ForegroundColor White
+Write-Host "  │                                                            │" -ForegroundColor DarkGray
+Write-Host "  │  3. Edite backend\.env e preencha DATABASE_URL:           │" -ForegroundColor White
+Write-Host "  │     mysql://USER:SENHA@HOST:3306/BANCO                    │" -ForegroundColor White
+Write-Host "  └───────────────────────────────────────────────────────────┘" -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "  Após configurar o banco, rode:" -ForegroundColor Cyan
-Write-Host "  .\migrar.ps1   — para criar as tabelas" -ForegroundColor White
+Write-Host "  .\migrar.ps1   — para criar as tabelas no MySQL HostGator" -ForegroundColor White
 Write-Host "  .\dev.ps1      — para iniciar o sistema" -ForegroundColor White
+Write-Host ""
+Write-Host "  Migrando do Supabase? Veja: MIGRACAO_HOSTGATOR.md" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "  ✓ Setup concluído!" -ForegroundColor Green
 Write-Host ""
