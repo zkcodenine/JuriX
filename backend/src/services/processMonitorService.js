@@ -10,18 +10,21 @@ const tribunalRegistry = require('./tribunalRegistry');
 const datajudService = require('./datajudService');
 const notificationService = require('./notificationService');
 const logger = require('../config/logger');
+const { PLANOS_PAGOS } = require('../middlewares/requerPlanoPago');
 
 // ─── Executar monitoramento geral ──────────────────
 async function executarMonitoramento() {
   logger.info('🔍 Process Monitor: iniciando ciclo de verificação...');
 
   try {
-    // Busca todos os processos com monitoramento ativo e vinculados ao CNJ
+    // Busca todos os processos com monitoramento ativo e vinculados ao CNJ.
+    // Monitoramento automático é exclusivo de planos pagos → filtra pelo dono.
     const processos = await prisma.processo.findMany({
       where: {
         monitoramentoAtivo: true,
         numeroCnj: { not: null },
         tribunal: { not: null },
+        usuario: { plano: { in: PLANOS_PAGOS } },
       },
       select: {
         id: true,

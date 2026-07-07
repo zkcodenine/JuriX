@@ -1,8 +1,27 @@
 const router = require('express').Router();
 const auth = require('../middlewares/auth');
 const { prisma } = require('../config/database');
+const gcal = require('../services/googleCalendarService');
 
 router.use(auth);
+
+// Espelha (ou remove) o prazo da tarefa na Google Agenda conforme o estado.
+// Mantém o googleEventId sincronizado no banco. Best-effort — nunca lança.
+async function sincronizarPrazoGoogle(usuarioId, tarefa) {
+  try {
+    const deveTer = Boolean(tarefa.prazo) && tarefa.status !== 'CONCLUIDA';
+    if (deveTer) {
+      const googleEventId = await gcal.sincronizarPrazoTarefa(usuarioId, tarefa);
+      if (googleEventId && googleEventId !== tarefa.googleEventId) {
+        await prisma.tarefa.update({ where: { id: tarefa.id }, data: { googleEventId } });
+      }
+    } else if (tarefa.googleEventId) {
+      // Sem prazo ou concluída → remove o lembrete do Google.
+      await gcal.deletarEventoGoogle(usuarioId, tarefa.googleEventId);
+      await prisma.tarefa.update({ where: { id: tarefa.id }, data: { googleEventId: null } });
+    }
+  } catch { /* best-effort */ }
+}
 
 router.get('/', async (req, res, next) => {
   try {
@@ -43,12 +62,21 @@ router.post('/', async (req, res, next) => {
       },
       include: { subtarefas: true },
     });
+
+    // Espelha o prazo na Google Agenda (se conectado e houver prazo).
+    await sincronizarPrazoGoogle(req.usuario.id, tarefa);
+
     res.status(201).json(tarefa);
   } catch (err) { next(err); }
 });
 
 router.put('/:id', async (req, res, next) => {
   try {
+    const existente = await prisma.tarefa.findFirst({
+      where: { id: req.params.id, usuarioId: req.usuario.id },
+    });
+    if (!existente) return res.status(404).json({ error: 'Tarefa não encontrada.' });
+
     const data = {};
     const allowed = ['titulo', 'descricao', 'prazo', 'prioridade', 'status', 'processoId', 'observacaoConclusao'];
     for (const key of allowed) {
@@ -57,16 +85,28 @@ router.put('/:id', async (req, res, next) => {
     if (data.prazo) {
       data.prazo = new Date(data.prazo.includes('T') ? data.prazo : data.prazo + 'T12:00:00.000Z');
     }
-    const tarefa = await prisma.tarefa.updateMany({
-      where: { id: req.params.id, usuarioId: req.usuario.id },
+    const tarefa = await prisma.tarefa.update({
+      where: { id: req.params.id },
       data,
+      include: { subtarefas: true },
     });
+
+    // Atualiza/cria/remove o prazo na Google Agenda conforme o novo estado.
+    await sincronizarPrazoGoogle(req.usuario.id, tarefa);
+
     res.json(tarefa);
   } catch (err) { next(err); }
 });
 
 router.delete('/:id', async (req, res, next) => {
   try {
+    const existente = await prisma.tarefa.findFirst({
+      where: { id: req.params.id, usuarioId: req.usuario.id },
+      select: { googleEventId: true },
+    });
+    if (existente?.googleEventId) {
+      await gcal.deletarEventoGoogle(req.usuario.id, existente.googleEventId);
+    }
     await prisma.tarefa.deleteMany({ where: { id: req.params.id, usuarioId: req.usuario.id } });
     res.json({ mensagem: 'Tarefa excluída.' });
   } catch (err) { next(err); }

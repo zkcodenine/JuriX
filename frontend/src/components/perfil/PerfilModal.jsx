@@ -1,9 +1,84 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
+
+/* ── Integração Google Agenda ──────────────────────────── */
+function GoogleAgendaSection() {
+  const qc = useQueryClient();
+  const { data: status, refetch, isFetching } = useQuery({
+    queryKey: ['google-status'],
+    queryFn: () => api.get('/google/status').then(r => r.data),
+  });
+
+  const conectar = async () => {
+    try {
+      const { data } = await api.get('/google/auth-url');
+      // Em Electron, window.open com http abre o navegador padrão do sistema.
+      window.open(data.url, '_blank', 'noopener');
+      toast('Autorize no navegador que abriu e depois clique em "Já conectei".', { icon: '🔗', duration: 6000 });
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Integração Google indisponível no momento.');
+    }
+  };
+
+  const desconectarMut = useMutation({
+    mutationFn: () => api.post('/google/disconnect'),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['google-status'] }); toast.success('Google Agenda desconectada.'); },
+  });
+
+  const conectado = status?.conectado;
+
+  return (
+    <div className="space-y-4 animate-fadeIn">
+      <div className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,.03)', border: '1px solid var(--border)' }}>
+        <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center justify-center rounded-xl flex-shrink-0" style={{ width: 44, height: 44, background: 'rgba(66,133,244,.12)' }}>
+            <i className="fab fa-google text-xl" style={{ color: '#4285F4' }} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold">Google Agenda</p>
+            <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+              {conectado ? 'Conectada' : 'Sincronize seus eventos com o Google'}
+            </p>
+          </div>
+          {conectado && (
+            <span className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0" style={{ background: 'rgba(16,185,129,.15)', color: '#34d399' }}>
+              <i className="fas fa-check mr-1" />ativa
+            </span>
+          )}
+        </div>
+
+        <p className="text-xs leading-relaxed mb-4" style={{ color: 'var(--text-secondary)' }}>
+          {conectado
+            ? <>Conectada{status?.email ? <> como <strong>{status.email}</strong></> : ''}. Os eventos criados na sua agenda do JuriX são enviados automaticamente para a sua Google Agenda, com lembrete 1h antes e no horário.</>
+            : status?.configurado === false
+              ? 'Integração indisponível no momento (não configurada no servidor).'
+              : 'Conecte sua conta Google para que os eventos criados no JuriX apareçam na sua Google Agenda — com notificação no celular 1h antes e na hora.'}
+        </p>
+
+        {conectado ? (
+          <button onClick={() => desconectarMut.mutate()} disabled={desconectarMut.isPending} className="btn btn-ghost w-full text-sm" style={{ color: 'var(--danger)' }}>
+            {desconectarMut.isPending ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <i className="fas fa-link-slash" />} Desconectar
+          </button>
+        ) : status?.configurado === false ? (
+          <div className="btn btn-ghost w-full text-sm opacity-50 cursor-default">Em breve</div>
+        ) : (
+          <div className="flex gap-2">
+            <button onClick={conectar} className="btn btn-gold flex-1 text-sm">
+              <i className="fab fa-google" /> Conectar
+            </button>
+            <button onClick={() => refetch()} disabled={isFetching} className="btn btn-ghost text-sm" title="Já autorizei — atualizar status">
+              {isFetching ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <><i className="fas fa-rotate" /> Já conectei</>}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /* ── Avatar Crop Modal ─────────────────────────────────── */
 function AvatarCropModal({ imageSrc, onClose, onSave }) {
@@ -338,8 +413,9 @@ export default function PerfilModal({ onClose }) {
   const ps = planBadge[usuario?.plano] || planBadge.GRATUITO;
 
   const TABS = [
-    { id: 'dados',     icon: 'fa-user',           label: 'Dados' },
-    { id: 'seguranca', icon: 'fa-shield-halved',   label: 'Segurança' },
+    { id: 'dados',       icon: 'fa-user',          label: 'Dados' },
+    { id: 'seguranca',   icon: 'fa-shield-halved', label: 'Segurança' },
+    { id: 'integracoes', icon: 'fa-plug',          label: 'Integrações' },
   ];
 
   return (
@@ -489,6 +565,9 @@ export default function PerfilModal({ onClose }) {
               </button>
             </form>
           )}
+
+          {/* ── Integrações ────────────────────────── */}
+          {tab === 'integracoes' && <GoogleAgendaSection />}
         </div>
       </div>
     </div>

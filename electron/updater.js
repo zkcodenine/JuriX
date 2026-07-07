@@ -130,8 +130,9 @@ function setupAutoUpdater(mainWindow) {
       title: 'Atualização Obrigatória — JuriX',
       message: `Versão ${info.version} pronta para instalar.`,
       detail:
-        'Uma nova versão do JuriX foi baixada. O aplicativo será fechado e atualizado automaticamente.\n\n' +
-        'Clique em "Atualizar Agora" para continuar.',
+        'Uma nova versão do JuriX foi baixada. Esta atualização é obrigatória.\n\n' +
+        'O aplicativo será fechado e atualizado automaticamente em instantes. ' +
+        'Clique em "Atualizar Agora" para atualizar imediatamente.',
       buttons: ['Atualizar Agora'],
       defaultId: 0,
       noLink: true,
@@ -140,9 +141,14 @@ function setupAutoUpdater(mainWindow) {
 
     const parentWin = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
 
+    // Atualização obrigatória: instala sozinho após 15s mesmo sem clique.
+    const AUTO_INSTALL_MS = 15000
+    let autoInstallTimer = null
+
     const doInstall = async () => {
       if (isQuittingToInstall) return
       isQuittingToInstall = true
+      if (autoInstallTimer) { clearTimeout(autoInstallTimer); autoInstallTimer = null }
       log.info('[Updater] Shutdown limpo + quitAndInstall silencioso...')
       try {
         // Sinaliza shutdown para o handler "backend exit" não cancelar a instalação
@@ -162,6 +168,12 @@ function setupAutoUpdater(mainWindow) {
         }
       })
     }
+
+    // Dispara a instalação automática caso o usuário não clique.
+    autoInstallTimer = setTimeout(() => {
+      log.info('[Updater] Auto-instalação após timeout (sem clique do usuário).')
+      doInstall()
+    }, AUTO_INSTALL_MS)
 
     dialog.showMessageBox(parentWin, dialogOpts).then(doInstall).catch((err) => {
       log.error('[Updater] Dialog error, installing anyway:', err.message)

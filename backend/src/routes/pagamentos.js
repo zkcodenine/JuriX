@@ -5,6 +5,10 @@ const logger = require('../config/logger');
 
 router.use(auth);
 
+// Link de pagamento fixo do Mercado Pago (checkout do plano Mensal — R$80).
+// Pode ser sobrescrito via env MERCADOPAGO_LINK_MENSAL.
+const LINK_MENSAL = process.env.MERCADOPAGO_LINK_MENSAL || 'https://mpago.la/31StmvJ';
+
 // ─── Planos disponíveis ────────────────────────────
 router.get('/planos', (req, res) => {
   res.json({
@@ -12,7 +16,7 @@ router.get('/planos', (req, res) => {
       {
         id: 'mensal',
         nome: 'Mensal',
-        preco: 79.90,
+        preco: 80.00,
         descricao: 'Acesso completo ao JuriX por 1 mês',
         recursos: [
           'Processos ilimitados',
@@ -45,19 +49,24 @@ router.get('/planos', (req, res) => {
 router.post('/criar-preferencia', async (req, res, next) => {
   try {
     const { plano } = req.body;
-    // Integração real com Mercado Pago SDK aqui
-    // Por ora retorna estrutura de preferência
-    const preco = plano === 'anual' ? 718.80 : 79.90;
-    const titulo = plano === 'anual' ? 'JuriX Plano Anual' : 'JuriX Plano Mensal';
 
-    res.json({
-      preferencia: {
-        id: `jurix_${req.usuario.id}_${Date.now()}`,
-        plano,
-        titulo,
-        preco,
-        init_point: `https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=DEMO`,
-      },
+    // Plano Mensal: usa o link de pagamento fixo do Mercado Pago (R$80).
+    if (plano !== 'anual') {
+      return res.json({
+        preferencia: {
+          id: `jurix_${req.usuario.id}_${Date.now()}`,
+          plano: 'mensal',
+          titulo: 'JuriX Plano Mensal',
+          preco: 80.00,
+          init_point: LINK_MENSAL,
+        },
+      });
+    }
+
+    // Plano Anual ainda não possui link de pagamento configurado.
+    return res.status(503).json({
+      indisponivel: true,
+      error: 'O plano Anual ainda não está disponível para compra online. Fale com o suporte.',
     });
   } catch (err) { next(err); }
 });

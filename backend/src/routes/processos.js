@@ -4,6 +4,7 @@ const ctrl = require('../controllers/processosController');
 const auth = require('../middlewares/auth');
 const validate = require('../middlewares/validate');
 const auditLog = require('../middlewares/audit');
+const requerPlanoPago = require('../middlewares/requerPlanoPago');
 
 router.use(auth);
 
@@ -18,14 +19,15 @@ router.put('/:id', auditLog('ATUALIZAR', 'PROCESSO'), ctrl.atualizar);
 router.delete('/:id', auditLog('DELETAR', 'PROCESSO'), ctrl.deletar);
 
 // ─── Importar via CNJ / DataJud ────────────────────
-router.post('/importar-cnj', [
+// Integração DataJud/CNJ é exclusiva dos planos pagos.
+router.post('/importar-cnj', requerPlanoPago('A integração DataJud/CNJ'), [
   body('numeroCnj').notEmpty().withMessage('Número CNJ obrigatório'),
   body('tribunal').notEmpty().withMessage('Tribunal obrigatório'),
   validate,
 ], auditLog('IMPORTAR_CNJ', 'PROCESSO'), ctrl.importarCNJ);
 
 // ─── Vincular processo ao CNJ ──────────────────────
-router.post('/:id/vincular-cnj', [
+router.post('/:id/vincular-cnj', requerPlanoPago('A integração DataJud/CNJ'), [
   param('id').isUUID(),
   body('numeroCnj').notEmpty(),
   body('tribunal').notEmpty(),
@@ -33,7 +35,7 @@ router.post('/:id/vincular-cnj', [
 ], ctrl.vincularCNJ);
 
 // ─── Confirmar vinculação CNJ (salva dados) ─────────
-router.post('/:id/confirmar-cnj', [
+router.post('/:id/confirmar-cnj', requerPlanoPago('A integração DataJud/CNJ'), [
   param('id').isUUID(),
   body('numeroCnj').notEmpty(),
   body('tribunal').notEmpty(),
@@ -41,12 +43,14 @@ router.post('/:id/confirmar-cnj', [
 ], ctrl.confirmarVinculacaoCNJ);
 
 // ─── Monitoramento ─────────────────────────────────
-router.post('/:id/monitoramento/ativar', ctrl.ativarMonitoramento);
+// Monitoramento automático é exclusivo dos planos pagos.
+router.post('/:id/monitoramento/ativar', requerPlanoPago('O monitoramento automático'), ctrl.ativarMonitoramento);
 router.post('/:id/monitoramento/desativar', ctrl.desativarMonitoramento);
 
 // ─── Sincronizar movimentações (forçar atualização) ──
-router.post('/sincronizar-todos', ctrl.sincronizarTodos);
-router.post('/:id/sincronizar', ctrl.sincronizarMovimentacoes);
+// Sincronização usa DataJud/CNJ → exclusiva dos planos pagos.
+router.post('/sincronizar-todos', requerPlanoPago('A sincronização de movimentações'), ctrl.sincronizarTodos);
+router.post('/:id/sincronizar', requerPlanoPago('A sincronização de movimentações'), ctrl.sincronizarMovimentacoes);
 
 // ─── Sub-recursos ──────────────────────────────────
 router.get('/:id/movimentacoes', ctrl.movimentacoes);

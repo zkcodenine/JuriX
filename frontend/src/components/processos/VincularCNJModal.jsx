@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -72,6 +72,44 @@ function detectarTribunal(numeroCnj) {
   return null;
 }
 
+// ─── Animação de busca no DataJud/CNJ (consulta pode ser lenta) ──────────
+function BuscandoCNJ({ onCancel }) {
+  const MSGS = [
+    'Conectando ao DataJud / CNJ...',
+    'Consultando o tribunal em tempo real...',
+    'Buscando partes, advogados e movimentações...',
+    'Quase lá — a consulta pode levar até 1 minuto...',
+  ];
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setI(v => (v + 1) % MSGS.length), 2500);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <div className="flex flex-col items-center text-center py-8 gap-5">
+      {/* Radar pulsante */}
+      <div className="relative flex items-center justify-center" style={{ width: 96, height: 96 }}>
+        <span className="absolute inline-flex rounded-full animate-ping" style={{ width: 96, height: 96, background: 'rgba(201,168,76,.18)' }} />
+        <span className="absolute inline-flex rounded-full animate-ping" style={{ width: 64, height: 64, background: 'rgba(201,168,76,.25)', animationDelay: '.4s' }} />
+        <div className="relative flex items-center justify-center rounded-full" style={{ width: 56, height: 56, background: 'rgba(201,168,76,.15)', border: '1px solid var(--accent-border, rgba(201,168,76,.3))' }}>
+          <i className="fas fa-satellite-dish text-xl" style={{ color: 'var(--accent)' }} />
+        </div>
+      </div>
+      <div>
+        <p className="text-sm font-semibold">Consultando DataJud / CNJ</p>
+        <p key={i} className="text-xs mt-1 animate-fadeIn" style={{ color: 'var(--text-secondary)' }}>{MSGS[i]}</p>
+      </div>
+      {/* Barra indeterminada */}
+      <div className="w-full max-w-xs h-1 rounded-full overflow-hidden animate-pulse" style={{ background: 'rgba(255,255,255,.06)' }}>
+        <div className="h-full rounded-full" style={{ width: '55%', background: 'var(--accent)' }} />
+      </div>
+      <button onClick={onCancel} className="btn btn-ghost text-sm mt-1">
+        <i className="fas fa-xmark" /> Cancelar busca
+      </button>
+    </div>
+  );
+}
+
 export default function VincularCNJModal({ onClose, onSuccess, processoId, numeroPreExistente }) {
   const formatarCNJ = (val) => {
     const n = val.replace(/\D/g, '').slice(0, 20);
@@ -94,12 +132,26 @@ export default function VincularCNJModal({ onClose, onSuccess, processoId, numer
   const [processoExistente, setProcessoExistente] = useState(null);
   const navigate = useNavigate();
 
+  // Permite abortar a consulta em andamento (clicar no X / Cancelar).
+  const abortRef = useRef(null);
+
+  // Fecha o modal abortando qualquer consulta CNJ em andamento.
+  const handleClose = () => {
+    abortRef.current?.abort();
+    onClose?.();
+  };
+
   // Modo importar: cria novo processo via CNJ
   // Modo vincular (processoId definido): retorna preview para confirmação
   const buscarMutation = useMutation({
-    mutationFn: (dados) => processoId
-      ? api.post(`/processos/${processoId}/vincular-cnj`, dados)
-      : api.post('/processos/importar-cnj', dados),
+    mutationFn: (dados) => {
+      abortRef.current = new AbortController();
+      // Consulta ao DataJud/CNJ pode ser lenta — timeout ampliado (120s).
+      const cfg = { signal: abortRef.current.signal, timeout: 120000 };
+      return processoId
+        ? api.post(`/processos/${processoId}/vincular-cnj`, dados, cfg)
+        : api.post('/processos/importar-cnj', dados, cfg);
+    },
     onSuccess: (res) => {
       if (processoId) {
         setPreview(res.data.preview);
@@ -111,6 +163,8 @@ export default function VincularCNJModal({ onClose, onSuccess, processoId, numer
       }
     },
     onError: (e) => {
+      // Consulta cancelada pelo usuário (X / Cancelar) — não mostra erro.
+      if (e.code === 'ERR_CANCELED' || e.name === 'CanceledError') return;
       if (e.response?.status === 409 && e.response?.data?.processoExistente) {
         setProcessoExistente(e.response.data.processoExistente);
         setStep(4); // Show conflict screen
@@ -122,14 +176,24 @@ export default function VincularCNJModal({ onClose, onSuccess, processoId, numer
 
   // Força reimportação — deleta o existente e importa de novo
   const reimportarMutation = useMutation({
-    mutationFn: () => api.post('/processos/importar-cnj', { numeroCnj: form.numeroCnj, tribunal: form.tribunal, forcar: true }),
+    mutationFn: () => {
+      abortRef.current = new AbortController();
+      return api.post(
+        '/processos/importar-cnj',
+        { numeroCnj: form.numeroCnj, tribunal: form.tribunal, forcar: true },
+        { signal: abortRef.current.signal, timeout: 120000 },
+      );
+    },
     onSuccess: (res) => {
       setStep(3);
       setPreview(res.data.processo);
       setProcessoExistente(null);
       toast.success('Processo reimportado com sucesso!');
     },
-    onError: (e) => toast.error(e.response?.data?.error || 'Erro ao reimportar processo.'),
+    onError: (e) => {
+      if (e.code === 'ERR_CANCELED' || e.name === 'CanceledError') return;
+      toast.error(e.response?.data?.error || 'Erro ao reimportar processo.');
+    },
   });
 
   const confirmarMutation = useMutation({
@@ -151,7 +215,7 @@ export default function VincularCNJModal({ onClose, onSuccess, processoId, numer
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-y-auto" style={{ background: 'rgba(0,0,0,.85)', backdropFilter: 'blur(6px)' }} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-y-auto" style={{ background: 'rgba(0,0,0,.85)', backdropFilter: 'blur(6px)' }} onClick={e => e.target === e.currentTarget && handleClose()}>
       <div className="w-full max-w-xl rounded-2xl overflow-hidden animate-scaleIn my-auto" style={{ background: 'var(--glass-bg, rgba(10,17,40,.92))', backdropFilter: 'blur(24px) saturate(1.3)', WebkitBackdropFilter: 'blur(24px) saturate(1.3)', border: '1px solid var(--border)' }}>
 
         {/* Header */}
@@ -167,13 +231,16 @@ export default function VincularCNJModal({ onClose, onSuccess, processoId, numer
               </p>
             </div>
           </div>
-          <button onClick={onClose} style={{ color: 'var(--text-secondary)' }}><i className="fas fa-xmark text-xl" /></button>
+          <button onClick={handleClose} title="Fechar / cancelar" style={{ color: 'var(--text-secondary)' }}><i className="fas fa-xmark text-xl" /></button>
         </div>
 
         <div className="p-6">
 
           {/* ─── STEP 1: Busca ────────────────────── */}
-          {step === 1 && (
+          {step === 1 && (buscarMutation.isPending || reimportarMutation.isPending) && (
+            <BuscandoCNJ onCancel={handleClose} />
+          )}
+          {step === 1 && !buscarMutation.isPending && !reimportarMutation.isPending && (
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium mb-2 uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
@@ -221,16 +288,13 @@ export default function VincularCNJModal({ onClose, onSuccess, processoId, numer
               </div>
 
               <div className="flex gap-3 justify-end pt-2">
-                <button onClick={onClose} className="btn btn-ghost">Cancelar</button>
+                <button onClick={handleClose} className="btn btn-ghost">Cancelar</button>
                 <button
                   onClick={() => buscarMutation.mutate({ numeroCnj: form.numeroCnj, tribunal: form.tribunal })}
                   disabled={form.numeroCnj.replace(/\D/g, '').length < 20 || !form.tribunal || buscarMutation.isPending}
                   className="btn btn-gold"
                 >
-                  {buscarMutation.isPending
-                    ? <><span className="spinner" style={{ width: 16, height: 16 }} /> Consultando DataJud...</>
-                    : <><i className="fas fa-magnifying-glass" /> Consultar CNJ</>
-                  }
+                  <i className="fas fa-magnifying-glass" /> Consultar CNJ
                 </button>
               </div>
             </div>

@@ -1,4 +1,5 @@
 const { prisma } = require('../config/database');
+const gcal = require('../services/googleCalendarService');
 
 // ─── Etiquetas ──────────────────────────────────────
 
@@ -88,6 +89,14 @@ async function criarEvento(req, res, next) {
       },
       include: { etiqueta: true },
     });
+
+    // Espelha na Google Agenda (best-effort — não bloqueia a resposta se falhar).
+    const googleEventId = await gcal.criarEventoGoogle(req.usuario.id, item);
+    if (googleEventId) {
+      await prisma.eventoAgenda.update({ where: { id: item.id }, data: { googleEventId } });
+      item.googleEventId = googleEventId;
+    }
+
     res.status(201).json(item);
   } catch (err) { next(err); }
 }
@@ -111,6 +120,18 @@ async function atualizarEvento(req, res, next) {
       },
       include: { etiqueta: true },
     });
+
+    // Reflete a alteração na Google Agenda (cria se ainda não existir lá).
+    if (item.googleEventId) {
+      await gcal.atualizarEventoGoogle(req.usuario.id, item);
+    } else {
+      const googleEventId = await gcal.criarEventoGoogle(req.usuario.id, item);
+      if (googleEventId) {
+        await prisma.eventoAgenda.update({ where: { id: item.id }, data: { googleEventId } });
+        item.googleEventId = googleEventId;
+      }
+    }
+
     res.json(item);
   } catch (err) { next(err); }
 }
@@ -122,6 +143,12 @@ async function deletarEvento(req, res, next) {
     });
     if (!existe) return res.status(404).json({ error: 'Evento não encontrado.' });
     await prisma.eventoAgenda.delete({ where: { id: req.params.id } });
+
+    // Remove o evento espelhado da Google Agenda.
+    if (existe.googleEventId) {
+      await gcal.deletarEventoGoogle(req.usuario.id, existe.googleEventId);
+    }
+
     res.json({ mensagem: 'Evento removido.' });
   } catch (err) { next(err); }
 }

@@ -69,6 +69,75 @@ function AvatarUpload({ usuario, onUpdate }) {
   );
 }
 
+// ─── Integração Google Agenda ──────────────────────
+function GoogleAgendaCard() {
+  const qc = useQueryClient();
+  const { data: status, refetch, isFetching } = useQuery({
+    queryKey: ['google-status'],
+    queryFn: () => api.get('/google/status').then(r => r.data),
+  });
+
+  const conectar = async () => {
+    try {
+      const { data } = await api.get('/google/auth-url');
+      // Em Electron, window.open com http abre o navegador padrão do sistema.
+      window.open(data.url, '_blank', 'noopener');
+      toast('Autorize no navegador que abriu e depois clique em "Já conectei".', { icon: '🔗', duration: 6000 });
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Integração Google indisponível no momento.');
+    }
+  };
+
+  const desconectarMut = useMutation({
+    mutationFn: () => api.post('/google/disconnect'),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['google-status'] }); toast.success('Google Agenda desconectada.'); },
+  });
+
+  const conectado = status?.conectado;
+
+  return (
+    <div className="card">
+      <h2 className="text-sm font-semibold uppercase tracking-widest mb-5 flex items-center gap-2" style={{ color: 'var(--text-muted)' }}>
+        <i className="fas fa-plug" style={{ color: 'var(--accent)' }} /> Integrações
+      </h2>
+
+      <div className="flex items-center gap-4 p-4 rounded-xl" style={{ background: 'rgba(255,255,255,.03)', border: '1px solid var(--border)' }}>
+        <div className="flex items-center justify-center rounded-lg flex-shrink-0" style={{ width: 44, height: 44, background: 'rgba(66,133,244,.12)' }}>
+          <i className="fab fa-google text-xl" style={{ color: '#4285F4' }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold">Google Agenda</p>
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            {conectado
+              ? <>Conectada{status?.email ? ` como ${status.email}` : ''} — seus eventos são enviados para a Google Agenda.</>
+              : status?.configurado === false
+                ? 'Indisponível no momento (não configurada no servidor).'
+                : 'Conecte para que os eventos criados no JuriX apareçam na sua Google Agenda.'}
+          </p>
+        </div>
+        <div className="flex-shrink-0 flex items-center gap-2">
+          {conectado ? (
+            <button onClick={() => desconectarMut.mutate()} disabled={desconectarMut.isPending} className="btn btn-ghost text-sm" style={{ color: 'var(--danger)' }}>
+              {desconectarMut.isPending ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <i className="fas fa-link-slash" />} Desconectar
+            </button>
+          ) : status?.configurado === false ? (
+            <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(255,255,255,.05)', color: 'var(--text-muted)' }}>Em breve</span>
+          ) : (
+            <>
+              <button onClick={conectar} className="btn btn-gold text-sm">
+                <i className="fab fa-google" /> Conectar
+              </button>
+              <button onClick={() => refetch()} disabled={isFetching} className="btn btn-ghost text-sm" title="Já conectei — atualizar status">
+                {isFetching ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <i className="fas fa-rotate" />} Já conectei
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Perfil() {
   const { usuario, atualizarUsuario } = useAuthStore();
   const queryClient = useQueryClient();
@@ -175,6 +244,9 @@ export default function Perfil() {
           </button>
         </div>
       </div>
+
+      {/* Integrações */}
+      <GoogleAgendaCard />
 
       {/* Segurança */}
       <div className="card">

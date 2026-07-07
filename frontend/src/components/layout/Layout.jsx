@@ -5,6 +5,7 @@ import Sidebar from './Sidebar';
 import Header from './Header';
 import api from '../../services/api';
 import useConnectionStore from '../../store/connectionStore';
+import useAgendaAlerts from '../../hooks/useAgendaAlerts';
 
 const pageTitles = {
   '/dashboard':               { titulo: 'Dashboard',              subtitulo: 'Visão geral do seu escritório'     },
@@ -24,6 +25,9 @@ export default function Layout() {
   const syncRef = useRef(false);
 
   const { isOnline, wasOffline, showReconnected, isUsingCache, connectionQuality, needsSync, setSynced, dismissReconnected } = useConnectionStore();
+
+  // Lembretes sonoros + visuais de eventos da agenda no horário marcado.
+  useAgendaAlerts();
 
   // ── Full data refresh when coming back online ──────────
   const refreshAllData = useCallback(async () => {

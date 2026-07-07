@@ -29,6 +29,11 @@ model Usuario {
   criadoEm        DateTime        @default(now())
   atualizadoEm    DateTime        @updatedAt
 
+  // ─── Integração Google Agenda (OAuth) ─────────────
+  googleRefreshToken String?      @db.Text
+  googleEmail        String?
+  googleConnected    Boolean      @default(false)
+
   processos        Processo[]
   tarefas          Tarefa[]
   notificacoes     Notificacao[]
@@ -168,6 +173,7 @@ model Tarefa {
   prioridade  Prioridade    @default(MEDIA)
   status      StatusTarefa  @default(PENDENTE)
   observacaoConclusao String? @db.Text
+  googleEventId String?     // ID do prazo espelhado na Google Agenda
   criadoEm   DateTime      @default(now())
   atualizadoEm DateTime    @updatedAt
 
@@ -399,6 +405,7 @@ model EventoAgenda {
   data         DateTime
   horario      String?
   descricao    String?
+  googleEventId String?        // ID do evento espelhado na Google Agenda
   criadoEm    DateTime        @default(now())
   atualizadoEm DateTime        @updatedAt
 

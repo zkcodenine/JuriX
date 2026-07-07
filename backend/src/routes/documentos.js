@@ -4,9 +4,13 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const auth = require('../middlewares/auth');
+const { planoAtivo } = require('../middlewares/requerPlanoPago');
 const { prisma } = require('../config/database');
 
 router.use(auth);
+
+// Limite de armazenamento total do plano gratuito (500 MB).
+const LIMITE_STORAGE_FREE = 500 * 1024 * 1024;
 
 // ─── Configuração do Multer ────────────────────────
 const storage = multer.diskStorage({
@@ -49,6 +53,22 @@ router.post('/upload', upload.single('arquivo'), async (req, res, next) => {
       // Remove arquivo físico que já foi salvo pelo multer
       fs.unlinkSync(req.file.path);
       return res.status(404).json({ error: 'Processo não encontrado.' });
+    }
+
+    // Plano gratuito: limite de 500MB de armazenamento total
+    if (!planoAtivo(req.usuario)) {
+      const agg = await prisma.documento.aggregate({
+        _sum: { tamanho: true },
+        where: { processo: { usuarioId: req.usuario.id } },
+      });
+      const usado = agg._sum.tamanho || 0;
+      if (usado + req.file.size > LIMITE_STORAGE_FREE) {
+        fs.unlinkSync(req.file.path);
+        return res.status(403).json({
+          error: 'Limite de 500MB de armazenamento atingido no plano gratuito. Faça upgrade para enviar mais documentos.',
+          upgrade: true,
+        });
+      }
     }
 
     const arquivoPath = `/storage/documentos/${req.usuario.id}/${req.file.filename}`;

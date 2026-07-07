@@ -29,12 +29,15 @@ export default function Planos() {
   const assinarMutation = useMutation({
     mutationFn: (plano) => api.post('/pagamentos/criar-preferencia', { plano }),
     onSuccess: (res) => {
-      // Redireciona para o Mercado Pago
+      // Redireciona para o checkout do Mercado Pago
       if (res.data.preferencia?.init_point) {
         window.location.href = res.data.preferencia.init_point;
       }
     },
-    onError: () => toast.error('Erro ao processar pagamento. Tente novamente.'),
+    onError: (err) => {
+      const msg = err?.response?.data?.error || 'Erro ao processar pagamento. Tente novamente.';
+      toast.error(msg);
+    },
   });
 
   const planos = data?.planos || [];
@@ -123,7 +126,7 @@ export default function Planos() {
 
           <div className="mb-6">
             <span className="text-4xl font-bold" style={{ color: 'var(--accent)' }}>
-              {periodo === 'anual' ? 'R$ 59,90' : 'R$ 79,90'}
+              {periodo === 'anual' ? 'R$ 59,90' : 'R$ 80,00'}
             </span>
             <span className="text-sm ml-2" style={{ color: 'var(--text-secondary)' }}>/mês</span>
             {periodo === 'anual' && (
