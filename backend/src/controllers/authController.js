@@ -5,6 +5,7 @@ const fs = require('fs');
 const multer = require('multer');
 const { prisma } = require('../config/database');
 const { cacheDel } = require('../config/redis');
+const logger = require('../config/logger');
 
 // ── Multer para avatar ──────────────────────────────
 const avatarStorage = multer.diskStorage({
@@ -80,6 +81,14 @@ async function login(req, res, next) {
       },
     });
     if (!usuario) {
+      return res.status(401).json({ error: 'Credenciais inválidas.' });
+    }
+
+    // Senha gravada fora do formato bcrypt (ex.: inserida à mão no banco) faz o
+    // compare abaixo retornar false para SEMPRE — o usuário fica trancado do
+    // lado de fora sem explicação. Registrar deixa isso diagnosticável.
+    if (!/^\$2[aby]\$/.test(usuario.senha || '')) {
+      logger.error(`Login impossível: a senha de ${email} não está em formato bcrypt no banco. Regrave-a com o app (cadastro/alterar senha) em vez de editar a tabela direto.`);
       return res.status(401).json({ error: 'Credenciais inválidas.' });
     }
 

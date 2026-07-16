@@ -75,8 +75,17 @@ api.interceptors.response.use(
     return res;
   },
   async (error) => {
-    // Auth error — redirect to login
-    if (error.response?.status === 401) {
+    // Auth error — sessão expirou, manda para o login.
+    //
+    // Exceto quando o 401 é a RESPOSTA DA PRÓPRIA TENTATIVA de login/cadastro:
+    // aí ele significa "credenciais inválidas", não "sessão expirou". Redirecionar
+    // nesse caso recarregava a página e matava o React antes do toast de erro
+    // renderizar — o usuário via a tela de login voltar limpa, sem mensagem
+    // nenhuma, sem ideia de que a senha estava errada.
+    const urlDaRequisicao = error.config?.url || '';
+    const ehTentativaDeAuth = urlDaRequisicao.includes('/auth/login') || urlDaRequisicao.includes('/auth/registrar');
+
+    if (error.response?.status === 401 && !ehTentativaDeAuth) {
       localStorage.removeItem('jurix_token');
       localStorage.removeItem('jurix_user');
       window.location.href = '/login';
