@@ -7,7 +7,10 @@ const log = require('electron-log')
 
 autoUpdater.logger = log
 autoUpdater.autoDownload = true
-autoUpdater.autoInstallOnAppQuit = true
+// IMPORTANTE: instalação SOMENTE via quitAndInstall(true, true) explícito.
+// Com autoInstallOnAppQuit=true, o app.quit() disparado ao fechar as janelas
+// instalava com isForceRunAfter=false e o app não reabria após atualizar.
+autoUpdater.autoInstallOnAppQuit = false
 autoUpdater.allowDowngrade = false
 // Garante que o instalador rode em modo silencioso
 autoUpdater.disableWebInstaller = true

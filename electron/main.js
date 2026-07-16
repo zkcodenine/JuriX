@@ -294,6 +294,11 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
+  // Durante uma atualização, o updater destrói as janelas de propósito para
+  // liberar a porta do backend. NÃO chamar app.quit() aqui — senão o
+  // autoInstallOnAppQuit dispara a instalação com isForceRunAfter=false e o
+  // app não reabre. Deixa o quitAndInstall(true, true) do updater cuidar disso.
+  if (global.__jurixUpdating) return
   if (process.platform !== 'darwin') app.quit()
 })
 
