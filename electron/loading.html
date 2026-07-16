@@ -97,8 +97,17 @@
       'Quase pronto...',
     ]
     let msgIdx = 0
+    const inicio = Date.now()
 
     setInterval(() => {
+      // A primeira abertura depois de um update é lenta: o antivírus varre os
+      // arquivos recém-gravados e o backend leva ~40s em vez de ~6s. Ficar
+      // repetindo "Quase pronto..." nesse intervalo parece travamento — melhor
+      // dizer o que está acontecendo.
+      if (Date.now() - inicio > 20000) {
+        statusEl.textContent = 'Primeira abertura após a atualização — pode levar até 1 minuto...'
+        return
+      }
       msgIdx = (msgIdx + 1) % messages.length
       statusEl.textContent = messages[msgIdx]
     }, 1800)

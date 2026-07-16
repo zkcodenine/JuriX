@@ -123,14 +123,23 @@ async function startBackend() {
       app.exit(1)
     })
 
-    // Aguarda /health responder (máx 45 s)
+    // Aguarda /health responder.
+    //
+    // O limite era 45s e estourava justamente no boot seguinte a um update:
+    // com os ~700MB recém-gravados, o antivírus varre cada arquivo no primeiro
+    // acesso e o backend leva 30-43s para carregar (medido nesta máquina),
+    // contra ~6s quando os arquivos já estão em cache. Como todo auto-update é
+    // seguido de um boot frio, 45s vivia no limite — daí o erro intermitente.
+    // 3 min dá folga real; quem falha de verdade falha rápido (o processo morre
+    // e o handler de 'exit' acima reporta).
+    const MAX_TENTATIVAS = 180
     let attempts = 0
 
     const poll = () => {
       http
         .get(`http://localhost:${BACKEND_PORT}/health`, (res) => {
           if (res.statusCode === 200) {
-            log.info('[Main] Backend pronto!')
+            log.info(`[Main] Backend pronto! (${attempts + 2}s)`)
             resolve()
           } else {
             retry()
@@ -140,10 +149,12 @@ async function startBackend() {
     }
 
     const retry = () => {
-      if (++attempts > 45) {
-        reject(new Error('Backend não respondeu após 45 segundos.\nVerifique sua conexão e o arquivo .env.'))
+      if (++attempts > MAX_TENTATIVAS) {
+        reject(new Error(`Backend não respondeu após ${MAX_TENTATIVAS} segundos.\nVerifique sua conexão e o arquivo .env.`))
         return
       }
+      // Loga de tempos em tempos para o log mostrar que ainda está esperando.
+      if (attempts % 15 === 0) log.info(`[Main] Aguardando backend... ${attempts}s`)
       setTimeout(poll, 1000)
     }
 
