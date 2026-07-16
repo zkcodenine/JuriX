@@ -22,8 +22,8 @@ async function connectDatabase() {
     } catch (err) {
       logger.warn(`Tentativa ${attempt}/${maxRetries} de conexão ao banco falhou: ${err.message}`);
       if (attempt === maxRetries) throw err;
-      // Exponential backoff: 2s, 4s, 8s, 16s
-      await new Promise(r => setTimeout(r, 2000 * Math.pow(2, attempt - 1)));
+      // Backoff capado (1s, 2s, 4s, 4s) — evita espera longa até o monitor subir
+      await new Promise(r => setTimeout(r, Math.min(4000, 1000 * Math.pow(2, attempt - 1))));
     }
   }
 }

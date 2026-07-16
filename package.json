@@ -1,6 +1,6 @@
 {
   "name": "jurix",
-  "version": "3.0.5",
+  "version": "3.0.7",
   "description": "JuriX — Sistema de Gestão Jurídica",
   "main": "electron/main.js",
   "author": {
@@ -82,8 +82,7 @@
           ]
         }
       ],
-      "icon": "electron/assets/icon.ico",
-      "publisherName": "JuriX"
+      "icon": "electron/assets/icon.ico"
     },
     "nsis": {
       "artifactName": "JuriX-Setup-${version}.${ext}",

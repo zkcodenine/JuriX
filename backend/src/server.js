@@ -43,20 +43,10 @@ async function bootstrap() {
     // ─── Libera porta se já em uso (reinicialização do app) ──
     await freePortIfBusy(PORT);
 
-    // ─── Banco de dados ────────────────────────────
-    await connectDatabase();
-    logger.info('✅ PostgreSQL conectado com sucesso');
-
-    // ─── Redis (opcional — fallback para cache em memória) ─
-    const redis = await connectRedis();
-    if (redis) logger.info('✅ Redis conectado com sucesso');
-    else logger.info('ℹ️  Rodando sem Redis (cache em memória)');
-
-    // ─── Monitor de processos ──────────────────────
-    startProcessMonitor();
-    logger.info('✅ Process Monitor Service iniciado');
-
-    // ─── Servidor HTTP ─────────────────────────────
+    // ─── Servidor HTTP sobe PRIMEIRO ───────────────
+    // O endpoint /health é estático (não depende do banco). Subir o listen
+    // antes de conectar ao banco garante que o Electron detecte o backend em
+    // ~1-2s, em vez de esperar o handshake do MySQL remoto e estourar os 45s.
     const server = app.listen(PORT, () => {
       logger.info(`🏛️  JuriX API rodando na porta ${PORT}`);
       logger.info(`📡 Ambiente: ${process.env.NODE_ENV || 'development'}`);
@@ -78,9 +68,35 @@ async function bootstrap() {
     server.headersTimeout = 70000;     // must be > keepAliveTimeout
     server.requestTimeout = 300000;    // 5 min — allows long sync operations
 
+    // ─── Banco de dados + serviços em SEGUNDO PLANO ──
+    // Conecta em background para não bloquear o boot da janela. As rotas /api
+    // que usam o banco só serão exercidas após o login, tempo suficiente para
+    // a conexão se estabelecer; se o banco cair, o app abre e reporta o erro
+    // por rota em vez de travar a inicialização inteira.
+    initServices();
+
   } catch (error) {
     logger.error('❌ Falha ao iniciar o servidor:', error);
     process.exit(1);
+  }
+}
+
+// ─── Conexões que não devem bloquear o listen ───────
+async function initServices() {
+  try {
+    await connectDatabase();
+    logger.info('✅ Banco de dados conectado com sucesso');
+
+    // ─── Redis (opcional — fallback para cache em memória) ─
+    const redis = await connectRedis();
+    if (redis) logger.info('✅ Redis conectado com sucesso');
+    else logger.info('ℹ️  Rodando sem Redis (cache em memória)');
+
+    // ─── Monitor de processos ──────────────────────
+    startProcessMonitor();
+    logger.info('✅ Process Monitor Service iniciado');
+  } catch (error) {
+    logger.error('❌ Falha ao conectar serviços (app segue no ar):', error);
   }
 }
 

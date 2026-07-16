@@ -12,6 +12,14 @@ autoUpdater.allowDowngrade = false
 // Garante que o instalador rode em modo silencioso
 autoUpdater.disableWebInstaller = true
 
+// ── Assinatura de código ─────────────────────────────────────────────────────
+// O app NÃO é assinado com certificado. Sem isto, o electron-updater rejeita o
+// instalador ("not signed by the application owner") e entra em loop infinito
+// de download. Retornar null = considerar válido (feed é o nosso GitHub via HTTPS).
+try {
+  autoUpdater.verifyUpdateCodeSignature = () => Promise.resolve(null)
+} catch (_) {}
+
 // ── Config ───────────────────────────────────────────────────────────────────
 const CHECK_INTERVAL_MS = 30 * 60 * 1000   // 30 min
 const RETRY_DELAYS = [10000, 30000, 60000, 120000, 300000]
