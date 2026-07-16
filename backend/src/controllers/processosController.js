@@ -20,11 +20,13 @@ async function listar(req, res, next) {
       where.status = { not: 'ARQUIVADO' };
     }
     if (busca) {
+      // MySQL usa collation case-insensitive por padrão — `mode` é exclusivo do
+      // PostgreSQL e o Prisma rejeita a query se ele for enviado.
       where.OR = [
-        { numero: { contains: busca, mode: 'insensitive' } },
-        { numeroCnj: { contains: busca, mode: 'insensitive' } },
-        { assunto: { contains: busca, mode: 'insensitive' } },
-        { partes: { some: { nome: { contains: busca, mode: 'insensitive' } } } },
+        { numero: { contains: busca } },
+        { numeroCnj: { contains: busca } },
+        { assunto: { contains: busca } },
+        { partes: { some: { nome: { contains: busca } } } },
       ];
     }
 
@@ -202,10 +204,10 @@ async function buscar(req, res, next) {
       where: {
         usuarioId: req.usuario.id,
         OR: [
-          { numero: { contains: q, mode: 'insensitive' } },
-          { numeroCnj: { contains: q, mode: 'insensitive' } },
-          { assunto: { contains: q, mode: 'insensitive' } },
-          { partes: { some: { nome: { contains: q, mode: 'insensitive' } } } },
+          { numero: { contains: q } },
+          { numeroCnj: { contains: q } },
+          { assunto: { contains: q } },
+          { partes: { some: { nome: { contains: q } } } },
         ],
       },
       take: 10,

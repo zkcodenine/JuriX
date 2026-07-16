@@ -24,6 +24,14 @@ function errorHandler(err, req, res, next) {
   if (err.code === 'P2006' || err.code === 'P2009' || err.code === 'P2007') {
     return res.status(400).json({ error: 'Dado inválido: verifique os campos enviados.' });
   }
+  // Banco remoto inacessível / conexão derrubada / pool esgotado. Sem isto, uma
+  // queda momentânea do MySQL virava um "Erro interno do servidor" genérico,
+  // indistinguível de um bug de código.
+  if (['P1001', 'P1002', 'P1008', 'P1017', 'P2024'].includes(err.code)) {
+    return res.status(503).json({
+      error: 'Sem conexão com o banco de dados. Verifique sua internet e tente novamente em instantes.',
+    });
+  }
   // Prisma validation error (campo desconhecido, tipo errado, campo obrigatório ausente)
   if (err.name === 'PrismaClientValidationError') {
     const match = err.message.match(/Unknown argument `(\w+)`/) ||

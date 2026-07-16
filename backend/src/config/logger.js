@@ -2,8 +2,10 @@ const winston = require('winston');
 const path = require('path');
 const fs = require('fs');
 
-// Garante que a pasta logs existe (evita erro no Windows)
-const logsDir = path.join(__dirname, '../../../logs');
+// Garante que a pasta logs existe (evita erro no Windows). No app empacotado o
+// Electron passa LOG_PATH (userData); sem ele o destino cairia dentro da pasta
+// de instalação, que nem sempre é gravável.
+const logsDir = process.env.LOG_PATH || path.join(__dirname, '../../../logs');
 if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
 
 const logger = winston.createLogger({

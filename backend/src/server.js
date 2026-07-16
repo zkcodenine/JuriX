@@ -1,9 +1,23 @@
 // Suporta DOTENV_CONFIG_PATH definido pelo Electron (app empacotado)
+//
+// O .env embarcado no instalador é uma cópia do arquivo de desenvolvimento
+// (NODE_ENV=development, PORT=3001...). Com `override: true` ele vencia as
+// variáveis que o Electron injeta no fork, e o app empacotado acabava rodando
+// em modo development — com log de query do Prisma a cada requisição. Estas
+// chaves são responsabilidade de quem inicia o processo, não do .env.
+const CHAVES_DO_HOST = ['NODE_ENV', 'PORT', 'ELECTRON', 'SERVE_FRONTEND', 'FRONTEND_DIST', 'STORAGE_PATH', 'LOG_PATH'];
+const ambienteDoHost = {};
+for (const chave of CHAVES_DO_HOST) {
+  if (process.env[chave] !== undefined) ambienteDoHost[chave] = process.env[chave];
+}
+
 require('dotenv').config(
   process.env.DOTENV_CONFIG_PATH
     ? { path: process.env.DOTENV_CONFIG_PATH, override: true }
     : {}
 );
+
+Object.assign(process.env, ambienteDoHost);
 const app = require('./app');
 const { connectDatabase } = require('./config/database');
 const { connectRedis } = require('./config/redis');
@@ -17,15 +31,27 @@ async function freePortIfBusy(port) {
   if (process.platform !== 'win32') return;
   const { execSync } = require('child_process');
   try {
-    const out = execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf8', windowsHide: true });
+    // `netstat` pode demorar (ou travar) em máquinas com muitas conexões. Sem
+    // timeout ele bloqueia o event loop e o listen abaixo nunca acontece — o
+    // Electron então desiste em 45s sem nenhum log. 5s é folgado e seguro.
+    const out = execSync('netstat -ano -p TCP', {
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 5000,
+    });
     const pids = new Set();
     for (const line of out.split('\n')) {
-      const m = line.trim().match(/\s+(\d+)$/);
-      if (m && m[1] !== '0') pids.add(m[1]);
+      // Só interessa quem está OUVINDO exatamente nesta porta. Filtrar por
+      // substring (":3001") pegava portas como :30010 e endereços remotos,
+      // levando o taskkill a matar processos alheios.
+      const m = line.trim().match(/^TCP\s+(\S+):(\d+)\s+\S+\s+LISTENING\s+(\d+)$/);
+      if (!m || Number(m[2]) !== Number(port)) continue;
+      const pid = m[3];
+      if (pid !== '0' && Number(pid) !== process.pid) pids.add(pid);
     }
     for (const pid of pids) {
       try {
-        execSync(`taskkill /F /PID ${pid}`, { windowsHide: true });
+        execSync(`taskkill /F /PID ${pid}`, { windowsHide: true, timeout: 5000 });
         logger.info(`🔧 Processo ${pid} encerrado (porta ${port} liberada)`);
       } catch (_) {}
     }
@@ -34,7 +60,8 @@ async function freePortIfBusy(port) {
       await new Promise(r => setTimeout(r, 800));
     }
   } catch (_) {
-    // Porta estava livre — nenhuma ação necessária
+    // Porta livre, netstat indisponível ou lento demais — segue o boot. Se a
+    // porta estiver mesmo ocupada, o handler de EADDRINUSE abaixo cuida disso.
   }
 }
 
