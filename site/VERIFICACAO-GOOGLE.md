@@ -7,17 +7,14 @@ Ao concluir, o aviso de "app não verificado" **deixa de aparecer** para todos o
 
 ## 0️⃣ Domínio usado
 
-- **Domínio de hospedagem/verificação:** `nossosflows.com.br` (é onde as páginas ficarão e o que será
+- **Domínio de hospedagem/verificação:** `jurix.com.br` (é onde as páginas ficarão e o que será
   verificado no Google).
 - **E-mail de contato:** `contato@jurix.com.br` (já configurado nas páginas).
 
-> ⚠️ Observação: o app se chama "JuriX" mas será hospedado em `nossosflows.com.br`. Isso normalmente é
-> aceito, desde que a política de privacidade identifique claramente o JuriX (o que já fazemos). Se um dia
-> você registrar `jurix.com.br`, hospedar lá deixa tudo mais coerente para o revisor do Google.
+> ✅ `jurix.com.br` é o domínio ideal: casa com o nome do app e com o e-mail de contato, então o revisor
+> do Google não terá o que questionar sobre coerência de marca.
 >
-> As URLs abaixo assumem hospedagem na **raiz** do domínio. Se você colocar as páginas numa subpasta
-> (ex.: `/jurix/`), basta acrescentar o caminho nas URLs — os links entre as páginas são relativos e
-> funcionam igual.
+> As URLs abaixo assumem hospedagem na **raiz** do `jurix.com.br`.
 
 ---
 
@@ -26,16 +23,16 @@ Ao concluir, o aviso de "app não verificado" **deixa de aparecer** para todos o
 1. cPanel → **Gerenciador de Arquivos** → pasta `public_html` (ou a pasta do seu domínio).
 2. Faça upload de: `index.html`, `privacidade.html`, `termos.html` (estão em `site/`).
 3. Teste no navegador:
-   - `https://nossosflows.com.br/` → página inicial
-   - `https://nossosflows.com.br/privacidade.html` → política de privacidade
-   - `https://nossosflows.com.br/termos.html` → termos
+   - `https://jurix.com.br/` → página inicial
+   - `https://jurix.com.br/privacidade.html` → política de privacidade
+   - `https://jurix.com.br/termos.html` → termos
 
 ---
 
 ## 2️⃣ Verificar o domínio no Google Search Console
 
 1. Acesse [search.google.com/search-console](https://search.google.com/search-console).
-2. Adicionar propriedade → **Prefixo do URL** → `https://nossosflows.com.br/`.
+2. Adicionar propriedade → **Prefixo do URL** → `https://jurix.com.br/`.
 3. Método de verificação: **arquivo HTML** (baixe e suba na `public_html`) ou **tag HTML** (colar no `<head>` do `index.html`).
 4. Clique em **Verificar**. Use a **mesma conta Google** dona do projeto no Google Cloud.
 
@@ -50,10 +47,10 @@ Google Cloud Console → **APIs e serviços → Tela de permissão OAuth**:
 | Nome do app | `JuriX` |
 | E-mail de suporte | seu e-mail |
 | Logotipo | PNG 120×120 do JuriX (opcional, mas recomendado) |
-| **Página inicial** | `https://nossosflows.com.br/` |
-| **Política de privacidade** | `https://nossosflows.com.br/privacidade.html` |
-| **Termos de serviço** | `https://nossosflows.com.br/termos.html` |
-| **Domínios autorizados** | `nossosflows.com.br` |
+| **Página inicial** | `https://jurix.com.br/` |
+| **Política de privacidade** | `https://jurix.com.br/privacidade.html` |
+| **Termos de serviço** | `https://jurix.com.br/termos.html` |
+| **Domínios autorizados** | `jurix.com.br` |
 | E-mail do desenvolvedor | seu e-mail |
 
 ---
