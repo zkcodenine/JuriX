@@ -174,7 +174,14 @@ model MensagemProcesso {
 
 **Em aberto:** dá para apagar/editar mensagem? (Sugestão: autor apaga a própria; fica "mensagem removida".)
 
-## Correção do storage — fazer agora, não depende de servidor
+## ~~Correção do storage~~ — FEITO na v3.0.12 (17/jul/2026)
+
+> Corrigido e verificado no app empacotado, nos dois sentidos: documento
+> gravado pelo código antigo foi **destruído** por um update real; documento
+> gravado pelo código novo **sobreviveu** a um update real, com conteúdo
+> intacto. Base única agora em `backend/src/config/storage.js`.
+
+O problema original, para registro:
 
 `routes/documentos.js` grava o upload em
 `path.join(__dirname, '../../../storage/documentos', usuarioId)`, ou seja,
@@ -190,7 +197,7 @@ Conserto: gravar em `process.env.STORAGE_PATH` (o Electron já aponta para
 
 | Fase | Risco | Observação |
 |---|---|---|
-| Storage | Baixo | Bug latente de perda de dados. Fazer já. |
+| ~~Storage~~ | — | **Feito na v3.0.12.** |
 | 1 — Admin/unidades/CPF | Baixo | **Escopo atual.** Aditivo, defaults preservam tudo. |
 | 0 — Servidor | **Alto** | Adiada (cPanel sem Node). Destrava 2 e 3, e mata o `.env` no instalador. |
 | 2 — Compartilhamento | **Alto** | ~78 filtros. Exige teste de isolamento. Depende da 0 para ser útil. |
