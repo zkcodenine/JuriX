@@ -79,6 +79,7 @@ function NavItem({ item, collapsed, naoLidas = 0, badgeCount = 0 }) {
 
 export default function Sidebar({ naoLidas = 0, processosAlertas = 0, onCollapse }) {
   const { usuario, logout } = useAuthStore();
+  const ehAdminGlobal = usuario?.perfil === 'ADMIN_GLOBAL';
   const { theme, toggleTheme } = useThemeStore();
   const [collapsed, setCollapsed]   = useState(false);
   const [showPerfil, setShowPerfil] = useState(false);
@@ -260,7 +261,20 @@ export default function Sidebar({ naoLidas = 0, processosAlertas = 0, onCollapse
 
           <NavItem item={{ path: '/planos', icon: 'fa-crown', label: 'Planos' }} collapsed={collapsed} />
 
-
+          {/* Administração: só para o admin global. O backend também barra —
+              esconder o item aqui é conveniência, não permissão. */}
+          {ehAdminGlobal && (
+            <>
+              <div className="my-2 mx-1" style={{ height: 1, background: 'var(--border)' }} />
+              {!collapsed && (
+                <p className="text-[10px] font-bold uppercase tracking-widest px-3 mb-1.5" style={{ color: 'var(--text-muted)' }}>
+                  Administração
+                </p>
+              )}
+              <NavItem item={{ path: '/admin/unidades', icon: 'fa-building', label: 'Unidades' }} collapsed={collapsed} />
+              <NavItem item={{ path: '/admin/usuarios', icon: 'fa-users-gear', label: 'Usuários' }} collapsed={collapsed} />
+            </>
+          )}
         </nav>
       </aside>
 

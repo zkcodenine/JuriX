@@ -17,8 +17,17 @@ router.post('/registrar', [
 ], authController.registrar);
 
 // POST /api/auth/login
+// O campo `email` aceita CPF OU e-mail. O nome foi mantido para não quebrar os
+// apps já instalados, que enviam { email, senha }. Antes havia um isEmail()
+// aqui, que rejeitaria um CPF com 400 antes de chegar ao controller.
 router.post('/login', [
-  body('email').isEmail().withMessage('E-mail inválido').normalizeEmail(),
+  body('email').trim().notEmpty().withMessage('Informe seu CPF ou e-mail')
+    .custom((valor) => {
+      const soDigitos = String(valor).replace(/\D/g, '');
+      if (/^\d{11}$/.test(soDigitos)) return true;          // CPF
+      if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(valor)) return true; // e-mail
+      throw new Error('Informe um CPF (11 dígitos) ou um e-mail válido');
+    }),
   body('senha').notEmpty().withMessage('Senha obrigatória'),
   validate,
 ], authController.login);

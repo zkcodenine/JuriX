@@ -22,7 +22,10 @@ async function authMiddleware(req, res, next) {
     }
 
     // ─── Cache do usuário ──────────────────────────
-    const cacheKey = `user:${decoded.id}`;
+    // Chave versionada: ao acrescentar campos aqui, suba a versão. Sem isso, um
+    // usuário já cacheado continuaria 5 min sem `perfil`, e as checagens de
+    // admin falhariam de forma intermitente e difícil de reproduzir.
+    const cacheKey = `user:v2:${decoded.id}`;
     let usuario = await cacheGet(cacheKey);
 
     if (!usuario) {
@@ -36,6 +39,8 @@ async function authMiddleware(req, res, next) {
           plano: true,
           planoExpiracao: true,
           ativo: true,
+          perfil: true,
+          unidadeId: true,
         },
       });
 

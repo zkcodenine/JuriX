@@ -11,5 +11,6 @@ router.use('/pagamentos', require('./pagamentos'));
 router.use('/configuracoes', require('./configuracoes'));
 router.use('/agenda',        require('./agenda'));
 router.use('/google',        require('./google'));
+router.use('/admin',         require('./admin'));
 
 module.exports = router;

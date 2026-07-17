@@ -70,17 +70,33 @@ async function registrar(req, res, next) {
   }
 }
 
+// Só dígitos, 11 posições = CPF. Qualquer outra coisa tratamos como e-mail.
+// Aceita "123.456.789-01" e "12345678901".
+function ehCpf(valor) {
+  return /^\d{11}$/.test(String(valor || '').replace(/\D/g, ''));
+}
+
+function apenasDigitos(valor) {
+  return String(valor || '').replace(/\D/g, '');
+}
+
 // POST /api/auth/login
 async function login(req, res, next) {
   try {
+    // O campo continua se chamando `email` por compatibilidade com o app já
+    // instalado, mas agora aceita CPF também.
     const { email, senha } = req.body;
+    const identificador = String(email || '').trim();
 
     const usuario = await prisma.usuario.findUnique({
-      where: { email },
+      where: ehCpf(identificador)
+        ? { cpf: apenasDigitos(identificador) }
+        : { email: identificador.toLowerCase() },
       select: {
         id: true, nome: true, email: true, senha: true, ativo: true,
         oab: true, telefone: true, avatar: true, tema: true,
         plano: true, planoExpiracao: true, criadoEm: true,
+        cpf: true, perfil: true, unidadeId: true, ultimoLogin: true,
       },
     });
     if (!usuario) {
@@ -91,7 +107,7 @@ async function login(req, res, next) {
     // compare abaixo retornar false para SEMPRE — o usuário fica trancado do
     // lado de fora sem explicação. Registrar deixa isso diagnosticável.
     if (!/^\$2[aby]\$/.test(usuario.senha || '')) {
-      logger.error(`Login impossível: a senha de ${email} não está em formato bcrypt no banco. Regrave-a com o app (cadastro/alterar senha) em vez de editar a tabela direto.`);
+      logger.error(`Login impossível: a senha de ${usuario.email} não está em formato bcrypt no banco. Regrave-a com o app (cadastro/alterar senha) em vez de editar a tabela direto.`);
       return res.status(401).json({ error: 'Credenciais inválidas.' });
     }
 
@@ -105,6 +121,12 @@ async function login(req, res, next) {
     }
 
     const token = gerarToken(usuario);
+
+    // Registra o acesso. Não bloqueia o login se falhar — entrar é mais
+    // importante do que anotar a data.
+    prisma.usuario
+      .update({ where: { id: usuario.id }, data: { ultimoLogin: new Date() } })
+      .catch((err) => logger.warn(`Falha ao gravar ultimoLogin de ${usuario.email}: ${err.message}`));
 
     const { senha: _, ...usuarioSemSenha } = usuario;
     res.json({ token, usuario: usuarioSemSenha });
@@ -122,6 +144,9 @@ async function me(req, res, next) {
         id: true, nome: true, email: true, oab: true,
         telefone: true, avatar: true, tema: true,
         plano: true, planoExpiracao: true, criadoEm: true,
+        // A barra lateral decide pelo `perfil` se mostra a Administração.
+        cpf: true, perfil: true, ultimoLogin: true,
+        unidade: { select: { id: true, nome: true } },
       },
     });
     res.json(usuario);
@@ -147,7 +172,7 @@ async function atualizarPerfil(req, res, next) {
       select: { id: true, nome: true, email: true, oab: true, telefone: true, avatar: true, tema: true },
     });
 
-    await cacheDel(`user:${req.usuario.id}`);
+    await cacheDel(`user:v2:${req.usuario.id}`);
     res.json(usuario);
   } catch (err) {
     next(err);
@@ -168,7 +193,7 @@ async function uploadAvatarHandler(req, res, next) {
       select: { id: true, avatar: true },
     });
 
-    await cacheDel(`user:${req.usuario.id}`);
+    await cacheDel(`user:v2:${req.usuario.id}`);
     res.json({ avatar: usuario.avatar });
   });
 }
@@ -187,7 +212,7 @@ async function alterarSenha(req, res, next) {
     const hash = await bcrypt.hash(novaSenha, 12);
     await prisma.usuario.update({ where: { id: req.usuario.id }, data: { senha: hash } });
 
-    await cacheDel(`user:${req.usuario.id}`);
+    await cacheDel(`user:v2:${req.usuario.id}`);
     res.json({ mensagem: 'Senha alterada com sucesso.' });
   } catch (err) {
     next(err);
@@ -207,7 +232,7 @@ async function devActivate(req, res, next) {
       data: { plano: 'VITALICIO', planoExpiracao: null },
       select: { id: true, nome: true, email: true, plano: true, tema: true, oab: true, telefone: true, avatar: true },
     });
-    await cacheDel(`user:${req.usuario.id}`);
+    await cacheDel(`user:v2:${req.usuario.id}`);
     res.json({ mensagem: 'Plano vitalício ativado com sucesso!', usuario });
   } catch (err) { next(err); }
 }

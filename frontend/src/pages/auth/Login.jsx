@@ -89,12 +89,19 @@ export default function Login() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-xs font-medium mb-2 uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-                E-mail
+                CPF ou e-mail
               </label>
+              {/*
+                type="text", não "email": com type="email" o próprio navegador
+                recusaria um CPF ("inclua um @") e o login nem chegaria a ser
+                enviado. O campo continua se chamando `email` para não quebrar
+                o app já instalado, que envia { email, senha }.
+              */}
               <input
                 className="input-base"
-                type="email"
-                placeholder="seu@email.com"
+                type="text"
+                autoComplete="username"
+                placeholder="seu@email.com ou 000.000.000-00"
                 value={form.email}
                 onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                 required

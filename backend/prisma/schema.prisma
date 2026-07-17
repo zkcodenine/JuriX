@@ -29,6 +29,15 @@ model Usuario {
   criadoEm        DateTime        @default(now())
   atualizadoEm    DateTime        @updatedAt
 
+  // ─── Perfil de acesso e unidade (escritório) ──────
+  // Opcionais de propósito: os usuários existentes continuam USUARIO, sem
+  // unidade, e seguem entrando por e-mail como sempre.
+  cpf              String?         @unique
+  perfil           PerfilUsuario   @default(USUARIO)
+  unidadeId        String?
+  ultimoLogin      DateTime?
+  unidade          Unidade?        @relation(fields: [unidadeId], references: [id], onDelete: SetNull)
+
   // ─── Integração Google Agenda (OAuth) ─────────────
   googleRefreshToken String?      @db.Text
   googleEmail        String?
@@ -43,7 +52,33 @@ model Usuario {
   etiquetasAgenda  EtiquetaAgenda[]
   eventosAgenda    EventoAgenda[]
 
+  @@index([unidadeId])
   @@map("usuarios")
+}
+
+// Escritório. Um usuário pertence a no máximo uma unidade.
+// ADMIN_GLOBAL fica sem unidade: ele está acima de todas.
+model Unidade {
+  id           String    @id @default(uuid())
+  nome         String
+  cnpj         String?
+  endereco     String?
+  telefone     String?
+  email        String?
+  observacoes  String?   @db.Text
+  ativo        Boolean   @default(true)
+  criadoEm     DateTime  @default(now())
+  atualizadoEm DateTime  @updatedAt
+
+  usuarios     Usuario[]
+
+  @@map("unidades")
+}
+
+enum PerfilUsuario {
+  USUARIO       // advogado comum
+  ADMIN_UNIDADE // administra a própria unidade
+  ADMIN_GLOBAL  // administra todas as unidades e usuários
 }
 
 enum Plano {

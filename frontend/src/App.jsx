@@ -16,10 +16,20 @@ import Planos from './pages/planos/Planos';
 import Perfil from './pages/perfil/Perfil';
 import EscritorioConfig from './pages/configuracoes/EscritorioConfig';
 import ModelosDocumentos from './pages/configuracoes/ModelosDocumentos';
+import Unidades from './pages/admin/Unidades';
+import Usuarios from './pages/admin/Usuarios';
 
 function PrivateRoute({ children }) {
   const { isAuth } = useAuthStore();
   return isAuth() ? children : <Navigate to="/login" replace />;
+}
+
+// Bloqueia a rota inteira, não só o item do menu — digitar /admin/usuarios na
+// barra de endereço não deve abrir a tela. O backend barra de novo de qualquer
+// forma; isto evita mostrar uma tela vazia e confusa.
+function AdminRoute({ children }) {
+  const { usuario } = useAuthStore();
+  return usuario?.perfil === 'ADMIN_GLOBAL' ? children : <Navigate to="/dashboard" replace />;
 }
 
 function PublicRoute({ children }) {
@@ -53,6 +63,8 @@ export default function App() {
           <Route path="notificacoes" element={<Notificacoes />} />
           <Route path="planos" element={<Planos />} />
           <Route path="perfil" element={<Perfil />} />
+          <Route path="admin/unidades" element={<AdminRoute><Unidades /></AdminRoute>} />
+          <Route path="admin/usuarios" element={<AdminRoute><Usuarios /></AdminRoute>} />
           <Route path="configuracoes/escritorio" element={<EscritorioConfig />} />
           <Route path="configuracoes/modelos" element={<ModelosDocumentos />} />
         </Route>
