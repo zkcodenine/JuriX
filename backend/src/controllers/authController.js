@@ -6,11 +6,14 @@ const multer = require('multer');
 const { prisma } = require('../config/database');
 const { cacheDel } = require('../config/redis');
 const logger = require('../config/logger');
+const { STORAGE_DIR } = require('../config/storage');
 
 // ── Multer para avatar ──────────────────────────────
 const avatarStorage = multer.diskStorage({
   destination: (req, _file, cb) => {
-    const dir = path.join(process.env.STORAGE_PATH || './storage', 'avatars');
+    // Mesma base do app.js e do upload de documentos. O './storage' relativo de
+    // antes dependia do CWD de quem iniciou o processo.
+    const dir = path.join(STORAGE_DIR, 'avatars');
     fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },

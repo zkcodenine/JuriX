@@ -85,8 +85,9 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ─── Arquivos estáticos (storage local) ────────────
-// Resolve storage base: usa STORAGE_PATH (Electron/produção) ou fallback
-const storageBase = process.env.STORAGE_PATH || path.join(__dirname, '../../storage');
+// Base única, compartilhada com o upload (config/storage.js). Antes cada lugar
+// resolvia por conta própria e o upload acabava gravando fora daqui.
+const { STORAGE_DIR: storageBase } = require('./config/storage');
 
 // Avatares: acesso público (usados em perfis)
 app.use('/storage/avatars', express.static(path.join(storageBase, 'avatars'), {

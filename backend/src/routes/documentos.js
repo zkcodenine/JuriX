@@ -6,6 +6,7 @@ const { v4: uuidv4 } = require('uuid');
 const auth = require('../middlewares/auth');
 const { planoAtivo } = require('../middlewares/requerPlanoPago');
 const { prisma } = require('../config/database');
+const { STORAGE_DIR, caminhoDoDocumento } = require('../config/storage');
 
 router.use(auth);
 
@@ -15,7 +16,7 @@ const LIMITE_STORAGE_FREE = 500 * 1024 * 1024;
 // ─── Configuração do Multer ────────────────────────
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = path.join(__dirname, '../../../storage/documentos', req.usuario.id);
+    const dir = path.join(STORAGE_DIR, 'documentos', req.usuario.id);
     fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
@@ -99,8 +100,8 @@ router.get('/:id/arquivo', async (req, res, next) => {
     });
     if (!doc) return res.status(404).json({ error: 'Documento não encontrado.' });
 
-    const filePath = path.join(__dirname, '../../../', doc.arquivo);
-    if (!fs.existsSync(filePath)) {
+    const filePath = caminhoDoDocumento(doc.arquivo);
+    if (!filePath || !fs.existsSync(filePath)) {
       return res.status(404).json({ error: 'Arquivo não encontrado no disco.' });
     }
 
@@ -155,8 +156,8 @@ router.delete('/:id', async (req, res, next) => {
     if (!doc) return res.status(404).json({ error: 'Documento não encontrado.' });
 
     // Remove arquivo físico
-    const filePath = path.join(__dirname, '../../../', doc.arquivo);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    const filePath = caminhoDoDocumento(doc.arquivo);
+    if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
 
     await prisma.documento.delete({ where: { id: req.params.id } });
     res.json({ mensagem: 'Documento excluído.' });

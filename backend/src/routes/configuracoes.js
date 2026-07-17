@@ -4,13 +4,15 @@ const fs = require('fs');
 const multer = require('multer');
 const auth = require('../middlewares/auth');
 const { prisma } = require('../config/database');
+const { STORAGE_DIR } = require('../config/storage');
 
 router.use(auth);
 
 // ─── Upload de logo do escritório ─────────────────
 const logoStorage = multer.diskStorage({
   destination: (req, _file, cb) => {
-    const dir = path.join(process.env.STORAGE_PATH || './storage', 'logos');
+    // Mesma base do resto do storage — o './storage' de antes dependia do CWD.
+    const dir = path.join(STORAGE_DIR, 'logos');
     fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
