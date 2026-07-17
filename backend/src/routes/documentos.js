@@ -7,6 +7,7 @@ const auth = require('../middlewares/auth');
 const { planoAtivo } = require('../middlewares/requerPlanoPago');
 const { prisma } = require('../config/database');
 const { STORAGE_DIR, caminhoDoDocumento } = require('../config/storage');
+const { whereProcessoVisivel, whereProcessoEditavel } = require('../utils/acessoProcesso');
 
 router.use(auth);
 
@@ -48,7 +49,7 @@ router.post('/upload', upload.single('arquivo'), async (req, res, next) => {
 
     // Verifica se o processo pertence ao usuário
     const processo = await prisma.processo.findFirst({
-      where: { id: processoId, usuarioId: req.usuario.id },
+      where: { id: processoId, ...whereProcessoEditavel(req.usuario.id) },
     });
     if (!processo) {
       // Remove arquivo físico que já foi salvo pelo multer
@@ -96,7 +97,7 @@ router.post('/upload', upload.single('arquivo'), async (req, res, next) => {
 router.get('/:id/arquivo', async (req, res, next) => {
   try {
     const doc = await prisma.documento.findFirst({
-      where: { id: req.params.id, processo: { usuarioId: req.usuario.id } },
+      where: { id: req.params.id, processo: whereProcessoVisivel(req.usuario.id) },
     });
     if (!doc) return res.status(404).json({ error: 'Documento não encontrado.' });
 
@@ -131,7 +132,7 @@ router.get('/:id/arquivo', async (req, res, next) => {
 router.put('/:id', async (req, res, next) => {
   try {
     const doc = await prisma.documento.findFirst({
-      where: { id: req.params.id, processo: { usuarioId: req.usuario.id } },
+      where: { id: req.params.id, processo: whereProcessoEditavel(req.usuario.id) },
     });
     if (!doc) return res.status(404).json({ error: 'Documento não encontrado.' });
 
@@ -151,7 +152,7 @@ router.delete('/:id', async (req, res, next) => {
   try {
     // Verifica se o documento pertence a um processo do usuário
     const doc = await prisma.documento.findFirst({
-      where: { id: req.params.id, processo: { usuarioId: req.usuario.id } },
+      where: { id: req.params.id, processo: whereProcessoEditavel(req.usuario.id) },
     });
     if (!doc) return res.status(404).json({ error: 'Documento não encontrado.' });
 

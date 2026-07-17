@@ -2,6 +2,9 @@ const { prisma } = require('../config/database');
 const { cacheGet, cacheSet, cacheDel, cacheDelPattern } = require('../config/redis');
 const datajudService = require('../services/datajudService');
 const notificationService = require('../services/notificationService');
+const {
+  whereProcessoVisivel, whereProcessoEditavel, podeVer, podeEditar, ehDono,
+} = require('../utils/acessoProcesso');
 
 // ─── Listar processos ──────────────────────────────
 async function listar(req, res, next) {
@@ -9,25 +12,31 @@ async function listar(req, res, next) {
     const { status, busca, pagina = 1, limite = 20, ordem = 'desc', incluirArquivados, apenasArquivados } = req.query;
     const skip = (Number(pagina) - 1) * Number(limite);
 
-    const where = { usuarioId: req.usuario.id };
+    // O acesso entra dentro de um AND, e NÃO como `where.OR`: a busca abaixo
+    // também usa OR e sobrescreveria o filtro de acesso, vazando os processos
+    // de todos os usuários. Cada condição é um item independente do AND.
+    const where = { AND: [whereProcessoVisivel(req.usuario.id)] };
+
     if (status) {
-      where.status = status;
+      where.AND.push({ status });
     } else if (apenasArquivados === 'true' || apenasArquivados === '1') {
       // Apenas processos arquivados
-      where.status = 'ARQUIVADO';
+      where.AND.push({ status: 'ARQUIVADO' });
     } else if (incluirArquivados !== 'true' && incluirArquivados !== '1') {
       // Por padrão, oculta processos ARQUIVADOS da lista principal
-      where.status = { not: 'ARQUIVADO' };
+      where.AND.push({ status: { not: 'ARQUIVADO' } });
     }
     if (busca) {
       // MySQL usa collation case-insensitive por padrão — `mode` é exclusivo do
       // PostgreSQL e o Prisma rejeita a query se ele for enviado.
-      where.OR = [
-        { numero: { contains: busca } },
-        { numeroCnj: { contains: busca } },
-        { assunto: { contains: busca } },
-        { partes: { some: { nome: { contains: busca } } } },
-      ];
+      where.AND.push({
+        OR: [
+          { numero: { contains: busca } },
+          { numeroCnj: { contains: busca } },
+          { assunto: { contains: busca } },
+          { partes: { some: { nome: { contains: busca } } } },
+        ],
+      });
     }
 
     const limite48h = new Date(Date.now() - 48 * 3600 * 1000);
@@ -103,7 +112,7 @@ async function criar(req, res, next) {
 async function obter(req, res, next) {
   try {
     const processo = await prisma.processo.findFirst({
-      where: { id: req.params.id, usuarioId: req.usuario.id },
+      where: { id: req.params.id, ...whereProcessoVisivel(req.usuario.id) },
       include: {
         partes: true,
         advogados: true,
@@ -124,10 +133,9 @@ async function obter(req, res, next) {
 // ─── Atualizar processo ────────────────────────────
 async function atualizar(req, res, next) {
   try {
-    const processo = await prisma.processo.findFirst({
-      where: { id: req.params.id, usuarioId: req.usuario.id },
-    });
-    if (!processo) return res.status(404).json({ error: 'Processo não encontrado.' });
+    // 404 se nem vejo o processo; 403 se vejo mas só tenho LEITURA.
+    const acesso = await podeEditar(prisma, req.params.id, req.usuario.id);
+    if (!acesso.ok) return res.status(acesso.status).json({ error: acesso.erro });
 
     // Whitelist de campos escalares editáveis — evita unknown field errors do Prisma
     const camposPermitidos = [
@@ -160,10 +168,9 @@ async function atualizar(req, res, next) {
 // ─── Deletar processo ──────────────────────────────
 async function deletar(req, res, next) {
   try {
-    const processo = await prisma.processo.findFirst({
-      where: { id: req.params.id, usuarioId: req.usuario.id },
-    });
-    if (!processo) return res.status(404).json({ error: 'Processo não encontrado.' });
+    // Excluir é exclusivo do dono, mesmo para quem tem EDICAO.
+    const acesso = await ehDono(prisma, req.params.id, req.usuario.id);
+    if (!acesso.ok) return res.status(acesso.status).json({ error: acesso.erro });
 
     const pid = req.params.id;
 
@@ -201,13 +208,18 @@ async function buscar(req, res, next) {
     const { q } = req.query;
     if (!q || q.length < 2) return res.json([]);
     const processos = await prisma.processo.findMany({
+      // AND, e não OR solto: o acesso precisa valer JUNTO com o termo buscado.
       where: {
-        usuarioId: req.usuario.id,
-        OR: [
-          { numero: { contains: q } },
-          { numeroCnj: { contains: q } },
-          { assunto: { contains: q } },
-          { partes: { some: { nome: { contains: q } } } },
+        AND: [
+          whereProcessoVisivel(req.usuario.id),
+          {
+            OR: [
+              { numero: { contains: q } },
+              { numeroCnj: { contains: q } },
+              { assunto: { contains: q } },
+              { partes: { some: { nome: { contains: q } } } },
+            ],
+          },
         ],
       },
       take: 10,
@@ -494,17 +506,21 @@ async function desativarMonitoramento(req, res, next) {
 // ─── Sub-recursos ──────────────────────────────────
 async function movimentacoes(req, res, next) {
   try {
+    // Sem acesso responde 404, como as demais rotas. O filtro abaixo já
+    // devolveria vazio, mas "lista vazia" e "não é seu" viravam a mesma
+    // resposta — e um 200 para processo alheio confunde na hora de depurar.
+    const acesso = await podeVer(prisma, req.params.id, req.usuario.id);
+    if (!acesso.ok) return res.status(acesso.status).json({ error: acesso.erro });
+
     const { pagina = 1, limite = 30 } = req.query;
     const [items, total] = await Promise.all([
       prisma.movimentacao.findMany({
-        where: { processoId: req.params.id, processo: { usuarioId: req.usuario.id } },
+        where: { processoId: req.params.id },
         orderBy: { data: 'desc' },
         skip: (Number(pagina) - 1) * Number(limite),
         take: Number(limite),
       }),
-      prisma.movimentacao.count({
-        where: { processoId: req.params.id, processo: { usuarioId: req.usuario.id } },
-      }),
+      prisma.movimentacao.count({ where: { processoId: req.params.id } }),
     ]);
     res.json({ items, total });
   } catch (err) { next(err); }
@@ -512,8 +528,20 @@ async function movimentacoes(req, res, next) {
 
 async function tarefas(req, res, next) {
   try {
+    // As tarefas são DO PROCESSO, não de quem pergunta — é assim que o obter()
+    // já as devolve, e num processo compartilhado os colegas precisam ver as
+    // tarefas uns dos outros. Num processo não compartilhado dá no mesmo: as
+    // tarefas dele são todas do dono.
+    //
+    // A checagem de acesso abaixo é obrigatória: antes, o filtro por usuarioId
+    // segurava o vazamento sozinho (devolvia lista vazia para estranhos). Sem
+    // ele e sem esta verificação, qualquer um leria as tarefas de qualquer
+    // processo só sabendo o id.
+    const acesso = await podeVer(prisma, req.params.id, req.usuario.id);
+    if (!acesso.ok) return res.status(acesso.status).json({ error: acesso.erro });
+
     const items = await prisma.tarefa.findMany({
-      where: { processoId: req.params.id, usuarioId: req.usuario.id },
+      where: { processoId: req.params.id },
       include: { subtarefas: true },
       orderBy: { criadoEm: 'desc' },
     });
@@ -524,7 +552,7 @@ async function tarefas(req, res, next) {
 async function documentos(req, res, next) {
   try {
     const items = await prisma.documento.findMany({
-      where: { processoId: req.params.id, processo: { usuarioId: req.usuario.id } },
+      where: { processoId: req.params.id, processo: whereProcessoVisivel(req.usuario.id) },
       orderBy: { criadoEm: 'desc' },
     });
     res.json(items);
@@ -534,7 +562,7 @@ async function documentos(req, res, next) {
 async function honorarios(req, res, next) {
   try {
     const items = await prisma.honorario.findMany({
-      where: { processoId: req.params.id, processo: { usuarioId: req.usuario.id } },
+      where: { processoId: req.params.id, processo: whereProcessoVisivel(req.usuario.id) },
       include: { parcelas: { orderBy: { vencimento: 'asc' } } },
     });
     res.json(items);
@@ -544,7 +572,7 @@ async function honorarios(req, res, next) {
 async function prazos(req, res, next) {
   try {
     const items = await prisma.prazo.findMany({
-      where: { processoId: req.params.id, processo: { usuarioId: req.usuario.id } },
+      where: { processoId: req.params.id, processo: whereProcessoVisivel(req.usuario.id) },
       orderBy: { dataVencimento: 'asc' },
     });
     res.json(items);
@@ -554,7 +582,7 @@ async function prazos(req, res, next) {
 async function partes(req, res, next) {
   try {
     const items = await prisma.parte.findMany({
-      where: { processoId: req.params.id, processo: { usuarioId: req.usuario.id } },
+      where: { processoId: req.params.id, processo: whereProcessoVisivel(req.usuario.id) },
     });
     res.json(items);
   } catch (err) { next(err); }
@@ -563,7 +591,7 @@ async function partes(req, res, next) {
 async function anotacoes(req, res, next) {
   try {
     const items = await prisma.anotacao.findMany({
-      where: { processoId: req.params.id, processo: { usuarioId: req.usuario.id } },
+      where: { processoId: req.params.id, processo: whereProcessoVisivel(req.usuario.id) },
       orderBy: { atualizadoEm: 'desc' },
     });
     res.json(items);
@@ -572,8 +600,8 @@ async function anotacoes(req, res, next) {
 
 async function adicionarParte(req, res, next) {
   try {
-    const processo = await prisma.processo.findFirst({ where: { id: req.params.id, usuarioId: req.usuario.id } });
-    if (!processo) return res.status(404).json({ error: 'Processo não encontrado.' });
+    const acesso = await podeEditar(prisma, req.params.id, req.usuario.id);
+    if (!acesso.ok) return res.status(acesso.status).json({ error: acesso.erro });
 
     const parte = await prisma.parte.create({
       data: { ...req.body, processoId: req.params.id },
@@ -585,7 +613,7 @@ async function adicionarParte(req, res, next) {
 async function removerParte(req, res, next) {
   try {
     const parte = await prisma.parte.findFirst({
-      where: { id: req.params.parteId, processo: { id: req.params.id, usuarioId: req.usuario.id } },
+      where: { id: req.params.parteId, processo: { id: req.params.id, ...whereProcessoEditavel(req.usuario.id) } },
     });
     if (!parte) return res.status(404).json({ error: 'Parte não encontrada.' });
 
@@ -596,8 +624,8 @@ async function removerParte(req, res, next) {
 
 async function adicionarMovimentacao(req, res, next) {
   try {
-    const processo = await prisma.processo.findFirst({ where: { id: req.params.id, usuarioId: req.usuario.id } });
-    if (!processo) return res.status(404).json({ error: 'Processo não encontrado.' });
+    const acesso = await podeEditar(prisma, req.params.id, req.usuario.id);
+    if (!acesso.ok) return res.status(acesso.status).json({ error: acesso.erro });
 
     const mov = await prisma.movimentacao.create({
       data: { ...req.body, processoId: req.params.id, origemApi: 'manual' },
@@ -609,7 +637,7 @@ async function adicionarMovimentacao(req, res, next) {
 async function deletarMovimentacao(req, res, next) {
   try {
     const mov = await prisma.movimentacao.findFirst({
-      where: { id: req.params.movId, processoId: req.params.id, processo: { usuarioId: req.usuario.id } },
+      where: { id: req.params.movId, processoId: req.params.id, processo: whereProcessoEditavel(req.usuario.id) },
     });
     if (!mov) return res.status(404).json({ error: 'Movimentação não encontrada.' });
     await prisma.movimentacao.delete({ where: { id: req.params.movId } });
@@ -619,8 +647,8 @@ async function deletarMovimentacao(req, res, next) {
 
 async function adicionarPrazo(req, res, next) {
   try {
-    const processo = await prisma.processo.findFirst({ where: { id: req.params.id, usuarioId: req.usuario.id } });
-    if (!processo) return res.status(404).json({ error: 'Processo não encontrado.' });
+    const acesso = await podeEditar(prisma, req.params.id, req.usuario.id);
+    if (!acesso.ok) return res.status(acesso.status).json({ error: acesso.erro });
 
     const b = req.body;
     if (!b.dataVencimento) {
@@ -645,7 +673,7 @@ async function adicionarPrazo(req, res, next) {
 async function atualizarPrazo(req, res, next) {
   try {
     const existe = await prisma.prazo.findFirst({
-      where: { id: req.params.prazoId, processo: { id: req.params.id, usuarioId: req.usuario.id } },
+      where: { id: req.params.prazoId, processo: { id: req.params.id, ...whereProcessoEditavel(req.usuario.id) } },
     });
     if (!existe) return res.status(404).json({ error: 'Prazo não encontrado.' });
 
@@ -660,7 +688,7 @@ async function atualizarPrazo(req, res, next) {
 async function deletarPrazo(req, res, next) {
   try {
     const existe = await prisma.prazo.findFirst({
-      where: { id: req.params.prazoId, processo: { id: req.params.id, usuarioId: req.usuario.id } },
+      where: { id: req.params.prazoId, processo: { id: req.params.id, ...whereProcessoEditavel(req.usuario.id) } },
     });
     if (!existe) return res.status(404).json({ error: 'Prazo não encontrado.' });
 
@@ -671,8 +699,8 @@ async function deletarPrazo(req, res, next) {
 
 async function adicionarAnotacao(req, res, next) {
   try {
-    const processo = await prisma.processo.findFirst({ where: { id: req.params.id, usuarioId: req.usuario.id } });
-    if (!processo) return res.status(404).json({ error: 'Processo não encontrado.' });
+    const acesso = await podeEditar(prisma, req.params.id, req.usuario.id);
+    if (!acesso.ok) return res.status(acesso.status).json({ error: acesso.erro });
 
     const anotacao = await prisma.anotacao.create({
       data: { ...req.body, processoId: req.params.id },
@@ -684,7 +712,7 @@ async function adicionarAnotacao(req, res, next) {
 async function atualizarAnotacao(req, res, next) {
   try {
     const existe = await prisma.anotacao.findFirst({
-      where: { id: req.params.anotacaoId, processo: { id: req.params.id, usuarioId: req.usuario.id } },
+      where: { id: req.params.anotacaoId, processo: { id: req.params.id, ...whereProcessoEditavel(req.usuario.id) } },
     });
     if (!existe) return res.status(404).json({ error: 'Anotação não encontrada.' });
 
@@ -699,7 +727,7 @@ async function atualizarAnotacao(req, res, next) {
 async function deletarAnotacao(req, res, next) {
   try {
     const existe = await prisma.anotacao.findFirst({
-      where: { id: req.params.anotacaoId, processo: { id: req.params.id, usuarioId: req.usuario.id } },
+      where: { id: req.params.anotacaoId, processo: { id: req.params.id, ...whereProcessoEditavel(req.usuario.id) } },
     });
     if (!existe) return res.status(404).json({ error: 'Anotação não encontrada.' });
 
@@ -829,7 +857,7 @@ async function sincronizarMovimentacoes(req, res, next) {
 async function movimentacoesAgenda(req, res, next) {
   try {
     const movimentacoes = await prisma.movimentacao.findMany({
-      where: { processo: { usuarioId: req.usuario.id } },
+      where: { processo: whereProcessoVisivel(req.usuario.id) },
       include: {
         processo: {
           select: {
@@ -851,7 +879,7 @@ async function movimentacoesAgenda(req, res, next) {
 async function prazosAgenda(req, res, next) {
   try {
     const prazos = await prisma.prazo.findMany({
-      where: { processo: { usuarioId: req.usuario.id } },
+      where: { processo: whereProcessoVisivel(req.usuario.id) },
       include: {
         processo: {
           select: {

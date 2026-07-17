@@ -6,11 +6,13 @@ import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { formatarData, formatarNumeroCNJ, formatarTempoRelativo, formatarMoeda, statusLabel, getIniciais } from '../../utils/formatters';
 import VincularCNJModal from '../../components/processos/VincularCNJModal';
+import CompartilharModal from '../../components/processos/CompartilharModal';
 
 import TabPrazos        from '../../components/processos/tabs/Prazos';
 import TabDocumentos    from '../../components/processos/tabs/Documentos';
 import TabHonorarios    from '../../components/processos/tabs/TabHonorarios';
 import TabMovimentacoes from '../../components/processos/tabs/Movimentacoes';
+import TabDiscussao     from '../../components/processos/tabs/Discussao';
 
 const STATUS_CORES = {
   ATIVO:      { bg: 'rgba(16,185,129,.12)',  color: '#10b981', border: 'rgba(16,185,129,.3)'  },
@@ -40,6 +42,7 @@ const TABS = [
   { id: 'documentos',   label: 'Documentos & Notas',     icon: 'fa-folder-open' },
   { id: 'prazos',       label: 'Prazos',                  icon: 'fa-clock'       },
   { id: 'honorarios',   label: 'Honorários',              icon: 'fa-sack-dollar' },
+  { id: 'discussao',    label: 'Discussão',               icon: 'fa-comments'    },
 ];
 
 export default function ProcessoDetail() {
@@ -48,6 +51,7 @@ export default function ProcessoDetail() {
   const qc        = useQueryClient();
   const [abaAtiva,     setAbaAtiva]    = useState('movimentacoes');
   const [showVincular,  setShowVincular]  = useState(false);
+  const [showCompartilhar, setShowCompartilhar] = useState(false);
   const [showEdit,      setShowEdit]      = useState(false);
   const [editForm,      setEditForm]      = useState(null);
   const [showDelete,    setShowDelete]    = useState(false);
@@ -196,6 +200,7 @@ export default function ProcessoDetail() {
     documentos: <TabDocumentos processo={processo} onRefresh={refresh} />,
     prazos:        <TabPrazos        processo={processo} onRefresh={refresh} />,
     honorarios:    <TabHonorarios    processo={processo} onRefresh={refresh} />,
+    discussao:     <TabDiscussao     processoId={id} />,
   };
 
   return (
@@ -279,6 +284,9 @@ export default function ProcessoDetail() {
             </div>
           ))}
           <div className="ml-auto flex gap-2">
+            <button onClick={() => setShowCompartilhar(true)} className="btn btn-ghost text-xs py-1.5 px-3">
+              <i className="fas fa-user-plus text-[11px]" /> Compartilhar
+            </button>
             {/* Vincular CNJ: só para processos manuais que ainda não foram vinculados */}
             {!processo.numeroCnj && processo.origemDados !== 'datajud' && (
               <button onClick={() => setShowVincular(true)} className="btn btn-ghost text-xs py-1.5 px-3">
@@ -676,6 +684,11 @@ export default function ProcessoDetail() {
           </div>
         </div>,
         document.body
+      )}
+
+      {/* ─── Modal compartilhar ───────────────────── */}
+      {showCompartilhar && (
+        <CompartilharModal processoId={id} onClose={() => setShowCompartilhar(false)} />
       )}
 
       {/* ─── Modal vincular CNJ ───────────────────── */}

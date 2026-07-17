@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const auth = require('../middlewares/auth');
 const { prisma } = require('../config/database');
+const { whereProcessoEditavel } = require('../utils/acessoProcesso');
 
 router.use(auth);
 
@@ -28,7 +29,7 @@ router.post('/', async (req, res, next) => {
 
     // Verifica se o processo pertence ao usuário
     const processo = await prisma.processo.findFirst({
-      where: { id: processoId, usuarioId: req.usuario.id },
+      where: { id: processoId, ...whereProcessoEditavel(req.usuario.id) },
     });
     if (!processo) return res.status(404).json({ error: 'Processo não encontrado.' });
 
@@ -56,7 +57,7 @@ router.put('/:id', async (req, res, next) => {
   try {
     // Verifica se o honorário pertence a um processo do usuário
     const existe = await prisma.honorario.findFirst({
-      where: { id: req.params.id, processo: { usuarioId: req.usuario.id } },
+      where: { id: req.params.id, processo: whereProcessoEditavel(req.usuario.id) },
     });
     if (!existe) return res.status(404).json({ error: 'Honorário não encontrado.' });
 
@@ -69,7 +70,7 @@ router.delete('/:id', async (req, res, next) => {
   try {
     // Verifica se o honorário pertence a um processo do usuário
     const existe = await prisma.honorario.findFirst({
-      where: { id: req.params.id, processo: { usuarioId: req.usuario.id } },
+      where: { id: req.params.id, processo: whereProcessoEditavel(req.usuario.id) },
     });
     if (!existe) return res.status(404).json({ error: 'Honorário não encontrado.' });
 
@@ -84,7 +85,7 @@ router.put('/:id/parcelas/:parcelaId', async (req, res, next) => {
   try {
     // Verifica se a parcela pertence a um honorário de um processo do usuário
     const existe = await prisma.parcela.findFirst({
-      where: { id: req.params.parcelaId, honorario: { id: req.params.id, processo: { usuarioId: req.usuario.id } } },
+      where: { id: req.params.parcelaId, honorario: { id: req.params.id, processo: whereProcessoEditavel(req.usuario.id) } },
     });
     if (!existe) return res.status(404).json({ error: 'Parcela não encontrada.' });
 
@@ -97,7 +98,7 @@ router.post('/:id/parcelas', async (req, res, next) => {
   try {
     // Verifica se o honorário pertence a um processo do usuário
     const existe = await prisma.honorario.findFirst({
-      where: { id: req.params.id, processo: { usuarioId: req.usuario.id } },
+      where: { id: req.params.id, processo: whereProcessoEditavel(req.usuario.id) },
     });
     if (!existe) return res.status(404).json({ error: 'Honorário não encontrado.' });
 

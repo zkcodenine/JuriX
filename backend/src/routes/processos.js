@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const { body, param } = require('express-validator');
 const ctrl = require('../controllers/processosController');
+const compart = require('../controllers/compartilhamentoController');
 const auth = require('../middlewares/auth');
 const validate = require('../middlewares/validate');
 const auditLog = require('../middlewares/audit');
@@ -73,6 +74,21 @@ router.delete('/:id/movimentacoes/:movId', ctrl.deletarMovimentacao);
 router.post('/:id/prazos', ctrl.adicionarPrazo);
 router.put('/:id/prazos/:prazoId', ctrl.atualizarPrazo);
 router.delete('/:id/prazos/:prazoId', ctrl.deletarPrazo);
+
+// ─── Compartilhamento (Fase 2) ─────────────────────
+// Quem tem acesso, e com quem dá para compartilhar (colegas da mesma unidade).
+router.get('/:id/compartilhamentos', compart.listar);
+router.get('/:id/compartilhar-com', compart.candidatos);
+router.post('/:id/compartilhar', [
+  body('usuarioId').isUUID().withMessage('Usuário inválido'),
+  validate,
+], auditLog('COMPARTILHAR', 'PROCESSO'), compart.compartilhar);
+router.delete('/:id/compartilhar/:usuarioId', auditLog('DESCOMPARTILHAR', 'PROCESSO'), compart.revogar);
+
+// ─── Chat de discussão (Fase 3) ────────────────────
+router.get('/:id/mensagens', compart.mensagens);
+router.post('/:id/mensagens', compart.enviarMensagem);
+router.delete('/:id/mensagens/:mensagemId', compart.removerMensagem);
 
 // ─── Anotações ─────────────────────────────────────
 router.post('/:id/anotacoes', ctrl.adicionarAnotacao);

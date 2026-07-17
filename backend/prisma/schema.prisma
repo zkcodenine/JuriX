@@ -44,6 +44,8 @@ model Usuario {
   googleConnected    Boolean      @default(false)
 
   processos        Processo[]
+  compartilhamentos ProcessoCompartilhado[]
+  mensagens        MensagemProcesso[]
   tarefas          Tarefa[]
   notificacoes     Notificacao[]
   auditLogs        AuditLog[]
@@ -81,6 +83,47 @@ enum PerfilUsuario {
   ADMIN_GLOBAL  // administra todas as unidades e usuários
 }
 
+// Processo compartilhado com outro usuário do mesmo escritório.
+// Só o DONO compartilha, descompartilha e exclui o processo.
+model ProcessoCompartilhado {
+  id         String                @id @default(uuid())
+  processoId String
+  usuarioId  String                // com quem foi compartilhado
+  nivel      NivelCompartilhamento @default(LEITURA)
+  criadoPor  String                // quem compartilhou (o dono)
+  criadoEm   DateTime              @default(now())
+
+  processo   Processo @relation(fields: [processoId], references: [id], onDelete: Cascade)
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([processoId, usuarioId])
+  @@index([usuarioId])
+  @@map("processos_compartilhados")
+}
+
+enum NivelCompartilhamento {
+  LEITURA // vê o processo e participa do chat, mas não altera nada
+  EDICAO  // além de ver, edita dados, prazos, tarefas e anotações
+}
+
+// Chat de discussão do processo. Visível a quem tem acesso ao processo
+// (dono + compartilhados), inclusive quem só tem LEITURA — ler o processo e
+// poder discutir sobre ele.
+model MensagemProcesso {
+  id         String   @id @default(uuid())
+  processoId String
+  usuarioId  String   // autor
+  texto      String   @db.Text
+  removida   Boolean  @default(false)
+  criadoEm   DateTime @default(now())
+
+  processo   Processo @relation(fields: [processoId], references: [id], onDelete: Cascade)
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([processoId, criadoEm])
+  @@map("mensagens_processo")
+}
+
 enum Plano {
   GRATUITO
   MENSAL
@@ -114,6 +157,8 @@ model Processo {
   atualizadoEm         DateTime            @updatedAt
 
   usuario              Usuario             @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  compartilhamentos    ProcessoCompartilhado[]
+  mensagens            MensagemProcesso[]
   partes               Parte[]
   advogados            AdvogadoProcesso[]
   movimentacoes        Movimentacao[]
