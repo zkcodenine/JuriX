@@ -1,7 +1,8 @@
 # Plano — Admin, Unidades, Compartilhamento e Chat
 
-Documento de planejamento. Nada aqui foi implementado ainda.
 Levantado em 16/jul/2026 sobre a v3.0.11.
+**Fases 1, 2 e 3 entregues (v3.0.13 e v3.0.14). Resta a Fase 0 (servidor),
+que destrava documentos/anexos compartilhados e torna as permissões reais.**
 
 ## Decisões já tomadas
 
@@ -118,7 +119,17 @@ model Usuario {
 
 **Impacto no uso atual:** nenhum. Usuários existentes viram `USUARIO`, sem unidade, e seguem entrando por e-mail.
 
-## Fase 2 — Compartilhar processo (a parte arriscada)
+## ~~Fase 2~~ — Compartilhar processo — **FEITA na v3.0.14** (17/jul/2026)
+
+> Entregue com o teste de isolamento (`backend/testes/isolamento.test.js`),
+> escrito ANTES do recurso: 30 casos, todos passando. Verificado também na
+> interface, com dados reais — o colega vê o processo compartilhado na lista,
+> é barrado ao editar em LEITURA, e quem não é dono não recebe controle de
+> compartilhamento nenhum no modal.
+>
+> Sem servidor, os DOCUMENTOS do processo compartilhado continuam no PC de quem
+> os subiu — hoje isso não incomoda (0 documentos no banco), mas volta a doer
+> assim que alguém subir o primeiro. É o que a Fase 0 resolve.
 
 ```prisma
 enum NivelCompartilhamento { LEITURA  EDICAO }
@@ -160,7 +171,9 @@ const whereProcessoAcessivel = (usuarioId) => ({
 
 **Em aberto:** o compartilhamento sobrevive se o usuário mudar de unidade? (Sugestão: sim, mas o admin vê e pode revogar.)
 
-## Fase 3 — Chat de discussão no processo
+## ~~Fase 3~~ — Chat de discussão — **FEITA na v3.0.14** (17/jul/2026)
+
+> Texto puro, por polling de 6s. Anexos seguem dependendo da Fase 0.
 
 ```prisma
 model MensagemProcesso {
@@ -210,8 +223,8 @@ Conserto: gravar em `process.env.STORAGE_PATH` (o Electron já aponta para
 | ~~Storage~~ | — | **Feito na v3.0.12.** |
 | ~~1 — Admin/unidades/CPF~~ | — | **Feita na v3.0.13.** |
 | 0 — Servidor | **Alto** | Adiada (cPanel sem Node). Destrava 2 e 3, e mata o `.env` no instalador. |
-| 2 — Compartilhamento | **Alto** | ~78 filtros. Exige teste de isolamento. Depende da 0 para ser útil. |
-| 3 — Chat | Médio | Texto roda sem servidor; anexos dependem da 0. |
+| ~~2 — Compartilhamento~~ | — | **Feita na v3.0.14.** Teste de isolamento: 30/30. |
+| ~~3 — Chat~~ | — | **Feita na v3.0.14** (texto). Anexos dependem da 0. |
 
 ## Pendências
 
