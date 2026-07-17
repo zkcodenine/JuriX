@@ -67,7 +67,17 @@ encontrado" é pior do que não ter.
 
 **A verificar antes de escrever código:** se o cPanel tem "Setup Node.js App" e qual versão do Node. Hospedagem compartilhada costuma derrubar processo Node ocioso e barrar WebSocket. Consequência aceita: chat por polling. Consequência a medir: se a API "dormir", o primeiro acesso do dia fica lento — e agora **se o servidor cair, ninguém trabalha**, o que é diferente de hoje.
 
-## Fase 1 — Admin, unidades, usuários, login por CPF  ← **ESCOPO ATUAL**
+## ~~Fase 1~~ — Admin, unidades, usuários, login por CPF — **FEITA na v3.0.13** (17/jul/2026)
+
+> Entregue e verificada na interface do app empacotado: usuário comum **não vê**
+> a seção Administração; o `jurixadmin` vê, lista usuários com CPF/perfil/último
+> login, e edita unidades. No backend: `ADMIN_UNIDADE` recebe 403 ao tentar
+> editar escritório alheio; login funciona por CPF (com e sem máscara) **e** por
+> e-mail. Dados de teste removidos ao final; os 4 usuários seguem como estavam.
+>
+> **Armadilha encontrada:** o banco é compartilhado com o app "Cards de Saude" —
+> `prisma db push` apagaria as tabelas dele. Ver `jurix-banco-compartilhado` na
+> memória e o aviso na seção de pendências.
 
 Aditiva: os defaults preservam o comportamento atual.
 
@@ -198,15 +208,18 @@ Conserto: gravar em `process.env.STORAGE_PATH` (o Electron já aponta para
 | Fase | Risco | Observação |
 |---|---|---|
 | ~~Storage~~ | — | **Feito na v3.0.12.** |
-| 1 — Admin/unidades/CPF | Baixo | **Escopo atual.** Aditivo, defaults preservam tudo. |
+| ~~1 — Admin/unidades/CPF~~ | — | **Feita na v3.0.13.** |
 | 0 — Servidor | **Alto** | Adiada (cPanel sem Node). Destrava 2 e 3, e mata o `.env` no instalador. |
 | 2 — Compartilhamento | **Alto** | ~78 filtros. Exige teste de isolamento. Depende da 0 para ser útil. |
 | 3 — Chat | Médio | Texto roda sem servidor; anexos dependem da 0. |
 
 ## Pendências
 
-1. ~~**Fase 1:** confirmar se o `jurixadmin` terá unidade ou fica acima de todas.~~
-   **Decidido:** `ADMIN_GLOBAL` fica **acima de todas as unidades** (sem vínculo,
-   enxerga todos os escritórios).
+1. **NUNCA rodar `prisma db push` neste banco.** Ele é compartilhado com o app
+   "Cards de Saude" (`cards_projects`, `cards_municipios`, `cards_logos_modelo`,
+   49 linhas reais). O push gera `DROP TABLE` nelas. Para mudar schema: gerar o
+   SQL com `prisma migrate diff`, **remover os DROP à mão**, aplicar com
+   `prisma db execute`, rodar `prisma generate` e conferir que as `cards_*`
+   continuam lá. Backup lógico antes.
 2. **Quando houver servidor:** escolher VPS ou PaaS; definir URL pública e HTTPS;
    combinar quando trocar `JWT_SECRET` e a senha do MySQL (desloga todos uma vez).
