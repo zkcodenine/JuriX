@@ -63,6 +63,13 @@ async function executarMonitoramento() {
         logger.error(`Process Monitor erro no processo ${processo.id}:`, err.message);
       }
 
+      // Registra QUANDO o tribunal foi conferido (mesmo sem novidade), para o
+      // card mostrar "verificado em ...".
+      await prisma.processo.update({
+        where: { id: processo.id },
+        data: { ultimaVerificacao: new Date() },
+      }).catch(() => {});
+
       // Delay entre requisições para evitar rate limiting
       await sleep(500);
     }

@@ -326,7 +326,13 @@ export default function ProcessoDetail() {
                 <span><i className="fas fa-calendar mr-1" style={{ color: 'var(--accent)' }} />Distribuído em {formatarData(processo.dataDistribuicao)}</span>
               )}
               {processo.dataUltimaAtualizacao && (
-                <span><i className="fas fa-clock-rotate-left mr-1" style={{ color: 'var(--accent)' }} />Atualizado {formatarTempoRelativo(processo.dataUltimaAtualizacao)}</span>
+                <span><i className="fas fa-clock-rotate-left mr-1" style={{ color: 'var(--accent)' }} />Última movimentação {formatarTempoRelativo(processo.dataUltimaAtualizacao)}</span>
+              )}
+              {processo.ultimaVerificacao && (
+                <span title={new Date(processo.ultimaVerificacao).toLocaleString('pt-BR')}>
+                  <i className="fas fa-satellite-dish mr-1" style={{ color: '#22d3ee' }} />
+                  Verificado em {new Date(processo.ultimaVerificacao).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </span>
               )}
             </div>
           </div>
@@ -661,7 +667,10 @@ export default function ProcessoDetail() {
                 )}
                 <span><i className="fas fa-calendar-check mr-1.5" style={{ color: 'var(--accent)' }} />Cadastrado em <strong className="text-white">{formatarData(processo.criadoEm)}</strong></span>
                 {processo.dataUltimaAtualizacao && (
-                  <span><i className="fas fa-clock-rotate-left mr-1.5" style={{ color: 'var(--accent)' }} />Última atualização CNJ <strong className="text-white">{formatarTempoRelativo(processo.dataUltimaAtualizacao)}</strong></span>
+                  <span><i className="fas fa-clock-rotate-left mr-1.5" style={{ color: 'var(--accent)' }} />Última movimentação <strong className="text-white">{formatarTempoRelativo(processo.dataUltimaAtualizacao)}</strong></span>
+                )}
+                {processo.ultimaVerificacao && (
+                  <span><i className="fas fa-satellite-dish mr-1.5" style={{ color: '#22d3ee' }} />Verificado no CNJ em <strong className="text-white">{new Date(processo.ultimaVerificacao).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</strong></span>
                 )}
               </div>
             </div>

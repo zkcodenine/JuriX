@@ -1039,6 +1039,12 @@ async function sincronizarTodos(req, res, next) {
           }
         }
 
+        // Registra a hora da conferência (mesmo sem novidade) para o card.
+        await prisma.processo.update({
+          where: { id: processo.id },
+          data: { ultimaVerificacao: new Date() },
+        }).catch(() => {});
+
         // Rate limit between processes
         await new Promise(r => setTimeout(r, 500));
       } catch (err) {

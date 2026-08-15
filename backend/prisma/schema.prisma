@@ -164,7 +164,8 @@ model Processo {
   status                StatusProcesso      @default(ATIVO)
   valor                 Decimal?            @db.Decimal(15, 2)
   dataDistribuicao      DateTime?
-  dataUltimaAtualizacao DateTime?
+  dataUltimaAtualizacao DateTime?           // quando houve o último MOVIMENTO novo
+  ultimaVerificacao     DateTime?           // quando o sistema CONFERIU o tribunal (mesmo sem novidade)
   origemDados           String?             @default("manual")
   monitoramentoAtivo    Boolean             @default(false)
   observacoes           String?
