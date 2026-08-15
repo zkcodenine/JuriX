@@ -35,4 +35,9 @@
 
   # Faz o Explorer recarregar o ícone em vez de mostrar o cache antigo.
   System::Call 'Shell32::SHChangeNotify(i 0x8000000, i 0, i 0, i 0)'
+
+  # REFORÇO (v3.0.23+): reconstrói o cache de ícones do Windows. Cobre o caso do
+  # Desktop redirecionado pro OneDrive, onde o atalho recriado às vezes continuava
+  # mostrando o ícone antigo em cache mesmo após o SHChangeNotify acima.
+  ExecWait '"$SYSDIR\ie4uinit.exe" -show'
 !macroend
