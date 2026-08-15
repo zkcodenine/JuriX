@@ -1,11 +1,83 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api from '../../../services/api';
 import { formatarData, diasAteVencer } from '../../../utils/formatters';
 
 const TIPOS = ['PROCESSUAL', 'RECURSAL', 'PRESCRICIONAL', 'DECADENCIAL', 'OUTRO'];
+
+// ── Gerenciador de tipos de prazo personalizados ──────────────────
+function TipoManager({ onClose }) {
+  const qc = useQueryClient();
+  const { data: tipos = [] } = useQuery({ queryKey: ['tipos-prazo'], queryFn: () => api.get('/tipos-prazo').then(r => r.data) });
+  const [novo, setNovo] = useState('');
+  const [editId, setEditId] = useState(null);
+  const [editNome, setEditNome] = useState('');
+  const inval = () => qc.invalidateQueries({ queryKey: ['tipos-prazo'] });
+
+  const criar = useMutation({
+    mutationFn: () => api.post('/tipos-prazo', { nome: novo.trim() }),
+    onSuccess: () => { setNovo(''); inval(); },
+    onError: (e) => toast.error(e.response?.data?.error || 'Erro ao criar'),
+  });
+  const editar = useMutation({
+    mutationFn: () => api.put(`/tipos-prazo/${editId}`, { nome: editNome.trim() }),
+    onSuccess: () => { setEditId(null); inval(); },
+    onError: (e) => toast.error(e.response?.data?.error || 'Erro ao editar'),
+  });
+  const excluir = useMutation({
+    mutationFn: (id) => api.delete(`/tipos-prazo/${id}`),
+    onSuccess: inval,
+  });
+
+  return createPortal(
+    <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,.85)', backdropFilter: 'blur(8px)' }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="w-full max-w-md rounded-2xl overflow-hidden animate-scaleIn" style={{ background: 'var(--glass-bg, rgba(10,17,40,.97))', border: '1px solid rgba(255,255,255,.1)', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+        <div className="flex justify-between items-center px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+          <h3 className="text-lg font-bold">Tipos de prazo</h3>
+          <button onClick={onClose} className="flex items-center justify-center rounded-xl hover:opacity-70" style={{ width: 34, height: 34, background: 'rgba(255,255,255,.03)' }}><i className="fas fa-xmark" style={{ color: 'var(--text-secondary)' }} /></button>
+        </div>
+        <div className="p-4 overflow-y-auto" style={{ flex: 1 }}>
+          <div className="flex gap-2 mb-4">
+            <input className="input-base flex-1" placeholder="Novo tipo…" value={novo}
+              onChange={(e) => setNovo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && novo.trim()) criar.mutate(); }} />
+            <button onClick={() => novo.trim() && criar.mutate()} disabled={!novo.trim() || criar.isPending} className="btn btn-gold px-4"><i className="fas fa-plus" /></button>
+          </div>
+          <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>Padrões</p>
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            {TIPOS.map(t => <span key={t} className="text-xs px-2 py-1 rounded-md" style={{ background: 'rgba(255,255,255,.04)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>{t}</span>)}
+          </div>
+          <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>Seus tipos</p>
+          {tipos.length === 0 ? (
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Nenhum tipo personalizado ainda.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {tipos.map(t => (
+                <div key={t.id} className="flex items-center gap-2 p-2 rounded-lg" style={{ background: 'rgba(255,255,255,.03)', border: '1px solid var(--border)' }}>
+                  {editId === t.id ? (
+                    <>
+                      <input className="input-base flex-1" value={editNome} onChange={(e) => setEditNome(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') editar.mutate(); }} autoFocus />
+                      <button onClick={() => editar.mutate()} className="text-xs px-2 py-1" style={{ color: 'var(--accent)' }}><i className="fas fa-check" /></button>
+                      <button onClick={() => setEditId(null)} className="text-xs px-2 py-1" style={{ color: 'var(--text-muted)' }}><i className="fas fa-xmark" /></button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex-1 text-sm">{t.nome}</span>
+                      <button onClick={() => { setEditId(t.id); setEditNome(t.nome); }} title="Editar" className="text-xs px-2 py-1" style={{ color: 'var(--text-secondary)' }}><i className="fas fa-pen" /></button>
+                      <button onClick={() => excluir.mutate(t.id)} title="Excluir" className="text-xs px-2 py-1" style={{ color: '#ef4444' }}><i className="fas fa-trash" /></button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 
 const labelStyle = {
   display: 'block', fontSize: '0.7rem', fontWeight: 600,
@@ -14,9 +86,11 @@ const labelStyle = {
 };
 
 function ModalNovoPrazo({ onClose, onSave, isPending }) {
-  const [form, setForm] = useState({ titulo: '', descricao: '', dataVencimento: '', tipo: '' });
+  const [form, setForm] = useState({ titulo: '', descricao: '', dataVencimento: '', horario: '', tipo: '', googleSync: true });
   const set = (field) => (e) => setForm(f => ({ ...f, [field]: e.target.value }));
   const canSave = form.titulo.trim() && form.dataVencimento && !isPending;
+  const [showTipos, setShowTipos] = useState(false);
+  const { data: tiposCustom = [] } = useQuery({ queryKey: ['tipos-prazo'], queryFn: () => api.get('/tipos-prazo').then(r => r.data) });
 
   return createPortal(
     <div
@@ -47,15 +121,32 @@ function ModalNovoPrazo({ onClose, onSave, isPending }) {
             <div>
               <label style={labelStyle}>Data de Vencimento <span style={{ color: 'var(--accent)' }}>*</span></label>
               <input type="date" className="input-base" style={{ fontSize: '0.875rem' }} value={form.dataVencimento} onChange={set('dataVencimento')} />
+              <div style={{ marginTop: 8 }}>
+                <label style={labelStyle}>Horário do lembrete <span style={{ color: 'var(--text-muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(opcional)</span></label>
+                <input type="time" className="input-base" style={{ fontSize: '0.875rem' }} value={form.horario} onChange={set('horario')} />
+              </div>
             </div>
             <div>
               <label style={labelStyle}>Tipo <span style={{ color: 'var(--text-muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(opcional)</span></label>
-              <input className="input-base" style={{ fontSize: '0.875rem' }} placeholder="Ex: Processual, Recursal..." value={form.tipo} onChange={set('tipo')} list="tipos-prazo" />
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input className="input-base" style={{ fontSize: '0.875rem', flex: 1 }} placeholder="Ex: Processual, Recursal..." value={form.tipo} onChange={set('tipo')} list="tipos-prazo" />
+                <button type="button" onClick={() => setShowTipos(true)} title="Gerenciar tipos" className="btn btn-ghost px-3" style={{ flexShrink: 0 }}><i className="fas fa-plus" /></button>
+              </div>
               <datalist id="tipos-prazo">
                 {TIPOS.map(t => <option key={t} value={t} />)}
+                {tiposCustom.map(t => <option key={t.id} value={t.nome} />)}
               </datalist>
             </div>
           </div>
+
+          <label className="flex items-center gap-2.5 cursor-pointer rounded-xl p-3" style={{ background: 'rgba(255,255,255,.03)', border: '1px solid var(--border)' }}>
+            <input type="checkbox" checked={form.googleSync}
+              onChange={(e) => setForm(f => ({ ...f, googleSync: e.target.checked }))}
+              style={{ accentColor: 'var(--accent)', width: 16, height: 16 }} />
+            <span className="text-sm flex items-center gap-1.5" style={{ color: 'var(--text-secondary)' }}>
+              <i className="fab fa-google text-xs" style={{ color: '#4285F4' }} /> Adicionar o prazo à Google Agenda
+            </span>
+          </label>
 
           {form.dataVencimento && (() => {
             const dias = diasAteVencer(form.dataVencimento);
@@ -85,6 +176,8 @@ function ModalNovoPrazo({ onClose, onSave, isPending }) {
           </button>
         </div>
       </div>
+
+      {showTipos && <TipoManager onClose={() => setShowTipos(false)} />}
     </div>,
     document.body
   );
@@ -291,11 +384,10 @@ export default function TabPrazos({ processo, onRefresh }) {
                   display: 'flex', alignItems: 'center', gap: '0.75rem',
                   padding: '0.875rem 1rem', borderRadius: 'var(--radius)',
                   background: bgColor, border: `1px solid ${borderWeak}`,
-                  borderLeft: `3px solid ${borderColor}`,
                   animationDelay: `${i * 30}ms`, transition: 'var(--transition)',
                 }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = borderColor; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = borderWeak; e.currentTarget.style.borderLeftColor = borderColor; }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = borderColor; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = borderWeak; e.currentTarget.style.transform = 'translateY(0)'; }}
               >
                 {/* Icon */}
                 <i className="fas fa-circle" style={{ color: borderColor, fontSize: 13, flexShrink: 0 }} />

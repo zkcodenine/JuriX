@@ -6,6 +6,38 @@ import api from '../../services/api';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 
+// ── Prévia REAL (WYSIWYG) — renderiza o mesmo papel timbrado do PDF,
+//    com o conteúdo digitado, num iframe reduzido em escala. O que se vê
+//    aqui é exatamente o que sai no "Baixar PDF". ──────────────────
+function LetterheadPreviewReal({ config = {}, logoUrl = '', conteudo = '', larguraPreview = 210 }) {
+  const [html, setHtml] = useState('');
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      const { buildLetterheadPage } = await import('../../utils/pdfExport');
+      const body = conteudo && conteudo.replace(/<[^>]*>/g, '').trim()
+        ? conteudo
+        : '<p>Prévia do documento — o texto digitado ao lado aparece aqui, com o papel timbrado do escritório.</p>';
+      const page = buildLetterheadPage(config, logoUrl || '', body, '');
+      if (!cancel) setHtml(`<!doctype html><html><head><meta charset="utf-8"></head><body>${page}</body></html>`);
+    })();
+    return () => { cancel = true; };
+  }, [config, logoUrl, conteudo]);
+
+  const W = 794, H = 1123;                 // A4 em px (96dpi)
+  const scale = larguraPreview / W;
+  return (
+    <div style={{ width: larguraPreview, height: H * scale, overflow: 'hidden', borderRadius: 6, border: '1px solid var(--border)', background: '#fff', boxShadow: '0 4px 20px rgba(0,0,0,.3)' }}>
+      <iframe
+        title="Prévia do PDF"
+        srcDoc={html}
+        scrolling="no"
+        style={{ width: W, height: H, border: 0, transform: `scale(${scale})`, transformOrigin: 'top left', pointerEvents: 'none' }}
+      />
+    </div>
+  );
+}
+
 // ── Preview ao vivo do papel timbrado ────────────────────────────
 function LetterheadPreview({ config = {}, logoUrl = '' }) {
   const cor = (config.corDocumento && config.corDocumento.length === 7)
@@ -557,11 +589,11 @@ export function GerarDocumentoModal({ modelo, processoPreSelecionado, onClose })
           {/* Editor + Preview lado a lado */}
           <div className="flex gap-4 items-start">
             {/* Preview */}
-            <div className="flex-shrink-0" style={{ width: 148 }}>
+            <div className="flex-shrink-0" style={{ width: 214 }}>
               <p className="text-[10px] font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--accent)' }}>
                 <i className="fas fa-eye mr-1" />Prévia do PDF
               </p>
-              <LetterheadPreview config={config} logoUrl={logoUrl} />
+              <LetterheadPreviewReal config={config} logoUrl={logoUrl} conteudo={gerado} larguraPreview={210} />
               <div className="mt-2 space-y-1">
                 <p className="text-[9px]" style={{ color: 'var(--text-muted)' }}>
                   Cor das bordas:{' '}
@@ -593,9 +625,6 @@ export function GerarDocumentoModal({ modelo, processoPreSelecionado, onClose })
                     </span>
                   )}
                 </label>
-                <button onClick={copiar} className="btn btn-ghost text-xs py-1 px-2">
-                  <i className="fas fa-copy text-[10px]" /> Copiar texto
-                </button>
               </div>
               <div className="ql-themed rounded-lg overflow-hidden" style={{ minHeight: 500 }}>
                 <ReactQuill

@@ -285,6 +285,74 @@ async function verificarPrazos() {
   logger.info(`⏰ Process Monitor: ${alertasCriados} alertas de prazo criados (${prazos.length} prazos verificados)`);
 }
 
+// ─── Verificar parcelas de honorário próximas ──────
+// Avisa "X dias antes" (conforme o usuário definiu no honorário) e no dia do
+// vencimento das parcelas ainda em aberto. Só para honorários com
+// notificarVencimento = true.
+async function verificarParcelas() {
+  const inicioHoje = new Date(); inicioHoje.setHours(0, 0, 0, 0);
+  // Janela ampla (até 60 dias) — o filtro fino por "diasAntes" é feito abaixo.
+  const limite = new Date(); limite.setDate(limite.getDate() + 60); limite.setHours(23, 59, 59, 999);
+
+  const parcelas = await prisma.parcela.findMany({
+    where: {
+      status: { in: ['PENDENTE', 'ATRASADO'] },
+      vencimento: { gte: inicioHoje, lte: limite },
+      honorario: { notificarVencimento: true, processo: { usuario: { ativo: true } } },
+    },
+    include: {
+      honorario: {
+        select: {
+          notificarDiasAntes: true,
+          processo: { select: { id: true, usuarioId: true, numero: true, cobrancaNome: true } },
+        },
+      },
+    },
+  });
+
+  const hojeFim = new Date(); hojeFim.setHours(23, 59, 59, 999);
+  let criados = 0;
+
+  for (const parcela of parcelas) {
+    const diasAntes = parcela.honorario.notificarDiasAntes ?? 3;
+    const diasRestantes = Math.ceil((new Date(parcela.vencimento) - hojeFim) / (1000 * 60 * 60 * 24));
+
+    // Dispara só nos marcos: "X dias antes" e no dia (ou atrasada).
+    const ehHoje = diasRestantes <= 0;
+    const ehMarco = diasRestantes === diasAntes;
+    if (!ehHoje && !ehMarco) continue;
+
+    const processo = parcela.honorario.processo;
+    const cliente = processo.cobrancaNome || processo.numero || 'cliente';
+    const valorFmt = Number(parcela.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+    // Evita duplicar a notificação no mesmo dia para a mesma parcela.
+    const hojeInicio = new Date(); hojeInicio.setHours(0, 0, 0, 0);
+    const jaNotificou = await prisma.notificacao.findFirst({
+      where: {
+        usuarioId: processo.usuarioId,
+        processoId: processo.id,
+        tipo: 'HONORARIO',
+        criadoEm: { gte: hojeInicio },
+        mensagem: { contains: valorFmt },
+      },
+    });
+    if (jaNotificou) continue;
+
+    const quando = ehHoje ? 'hoje' : `em ${diasRestantes} dia${diasRestantes > 1 ? 's' : ''}`;
+    await notificationService.criarNotificacao({
+      usuarioId: processo.usuarioId,
+      processoId: processo.id,
+      tipo: 'HONORARIO',
+      titulo: ehHoje ? 'Parcela vence hoje' : `Parcela vence ${quando}`,
+      mensagem: `Honorário de ${cliente} — parcela de ${valorFmt} vence ${quando}.`,
+    });
+    criados++;
+  }
+
+  logger.info(`💰 Process Monitor: ${criados} alerta(s) de parcela criados (${parcelas.length} verificadas)`);
+}
+
 // ─── Sugerir tarefa após nova movimentação ─────────
 async function sugerirTarefa(processo, movimentacao) {
   const descricaoLower = movimentacao.descricao.toLowerCase();
@@ -318,4 +386,4 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-module.exports = { executarMonitoramento, verificarProcesso, verificarPrazos };
+module.exports = { executarMonitoramento, verificarProcesso, verificarPrazos, verificarParcelas };

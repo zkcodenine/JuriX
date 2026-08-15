@@ -9,7 +9,9 @@ router.use(auth);
 // Mantém o googleEventId sincronizado no banco. Best-effort — nunca lança.
 async function sincronizarPrazoGoogle(usuarioId, tarefa) {
   try {
-    const deveTer = Boolean(tarefa.prazo) && tarefa.status !== 'CONCLUIDA';
+    // Respeita o opt-in do usuário (padrão ON). Se desligado, garante que não
+    // haja lembrete no Google.
+    const deveTer = Boolean(tarefa.prazo) && tarefa.status !== 'CONCLUIDA' && tarefa.googleSync !== false;
     if (deveTer) {
       const googleEventId = await gcal.sincronizarPrazoTarefa(usuarioId, tarefa);
       if (googleEventId && googleEventId !== tarefa.googleEventId) {
@@ -52,6 +54,8 @@ router.post('/', async (req, res, next) => {
       prioridade: body.prioridade || 'MEDIA',
       status:     body.status     || 'PENDENTE',
       processoId: body.processoId || null,
+      horario:    body.horario    || null,
+      googleSync: body.googleSync !== false, // padrão ON
     };
 
     const tarefa = await prisma.tarefa.create({
@@ -78,7 +82,7 @@ router.put('/:id', async (req, res, next) => {
     if (!existente) return res.status(404).json({ error: 'Tarefa não encontrada.' });
 
     const data = {};
-    const allowed = ['titulo', 'descricao', 'prazo', 'prioridade', 'status', 'processoId', 'observacaoConclusao'];
+    const allowed = ['titulo', 'descricao', 'prazo', 'prioridade', 'status', 'processoId', 'observacaoConclusao', 'googleSync', 'horario'];
     for (const key of allowed) {
       if (req.body[key] !== undefined) data[key] = req.body[key];
     }

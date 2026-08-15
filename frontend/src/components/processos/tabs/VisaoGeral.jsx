@@ -92,7 +92,7 @@ export default function TabVisaoGeral({ processo }) {
             </h4>
             <div className="space-y-2">
               {tarefas.map(t => (
-                <div key={t.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,.03)', border: '1px solid var(--border)', borderLeft: `3px solid ${prioridadeColor[t.prioridade]}` }}>
+                <div key={t.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-300 hover:-translate-y-0.5" style={{ background: 'rgba(255,255,255,.03)', border: '1px solid var(--border)' }}>
                   <i className="fas fa-circle-half-stroke text-xs" style={{ color: prioridadeColor[t.prioridade] }} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{t.titulo}</p>
@@ -134,7 +134,7 @@ export default function TabVisaoGeral({ processo }) {
 
 function ParteBadge({ parte, cor, label }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,.03)', border: '1px solid var(--border)', borderLeft: `3px solid ${cor}` }}>
+    <div className="flex items-center gap-3 rounded-xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,.03)', border: '1px solid var(--border)' }}>
       <div>
         <p className="text-sm font-medium">{parte.nome}</p>
         <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{label}{parte.cpfCnpj ? ` • ${parte.cpfCnpj}` : ''}</p>

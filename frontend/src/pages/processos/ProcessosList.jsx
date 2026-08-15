@@ -168,11 +168,14 @@ function ProcessCard({ proc, index, onDelete }) {
       }}
       onClick={() => navigate(`/processos/${proc.id}`)}
     >
-      {/* Barra dourada no topo — sempre visível se tem atualização, hover nos demais */}
-      <div
-        className={`absolute top-0 left-0 right-0 h-0.5 origin-left transition-transform duration-300 ${temAtualizacao ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'}`}
-        style={{ background: 'linear-gradient(90deg, #C9A84C, #A8873A)' }}
-      />
+      {/* Barra dourada no topo — apenas como indicador de nova atualização
+          (não aparece mais no hover; o hover usa uma animação clean do card). */}
+      {temAtualizacao && (
+        <div
+          className="absolute top-0 left-0 right-0 h-0.5 origin-left scale-x-100 transition-transform duration-300"
+          style={{ background: 'linear-gradient(90deg, #C9A84C, #A8873A)' }}
+        />
+      )}
 
       {/* Glow de fundo — sempre visível se tem atualização */}
       <div
@@ -183,19 +186,20 @@ function ProcessCard({ proc, index, onDelete }) {
         }}
       />
 
-      {/* Badge de novas movimentações no canto superior direito */}
+      {/* Balão de novas movimentações no canto superior direito — pulsa para
+          chamar a atenção de qual processo teve novidade. */}
       {temAtualizacao && novasMovimentacoes > 0 && (
         <div
-          className="absolute top-2.5 right-2.5 flex items-center gap-1 px-2 py-0.5 rounded-full animate-bounceIn z-10"
+          className="absolute top-2.5 right-2.5 flex items-center gap-1 px-2 py-0.5 rounded-full animate-bounceIn animate-pulse-gold z-10"
           style={{
             background: 'linear-gradient(135deg, #C9A84C, #A8873A)',
             color: '#0a0a0a',
             fontSize: 10,
             fontWeight: 800,
-            boxShadow: '0 2px 8px rgba(201,168,76,.4)',
+            boxShadow: '0 2px 12px rgba(201,168,76,.6)',
           }}
         >
-          <i className="fas fa-bell text-[8px]" />
+          <i className="fas fa-bolt text-[8px]" />
           {novasMovimentacoes} nova{novasMovimentacoes > 1 ? 's' : ''}
         </div>
       )}
@@ -349,7 +353,7 @@ export default function ProcessosList() {
   const [mostrarArquivados, setMostrarArquivados] = useState(false);
 
   /* ─── Queries / Mutations ─────────────────────── */
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: ['processos', busca, pagina, mostrarArquivados],
     queryFn: () => api.get('/processos', {
       params: {
@@ -360,6 +364,9 @@ export default function ProcessosList() {
       }
     }).then(r => r.data),
     keepPreviousData: true,
+    // Revalida ao entrar na tela, mas mostra o que já tem em cache na hora.
+    staleTime: 15000,
+    refetchOnMount: 'always',
   });
 
   const processos    = data?.processos    || [];
@@ -455,7 +462,7 @@ export default function ProcessosList() {
       </div>
 
       {/* ─── Grid ───────────────────────────────── */}
-      {isLoading ? (
+      {(isLoading || (isFetching && processos.length === 0)) ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {[...Array(6)].map((_, i) => (
             <div key={i} className="skeleton rounded-2xl" style={{ height: 180, animationDelay: `${i * 60}ms` }} />

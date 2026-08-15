@@ -1,14 +1,17 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import api from '../../services/api';
 import useConnectionStore from '../../store/connectionStore';
 import useAgendaAlerts from '../../hooks/useAgendaAlerts';
+import useDesktopAlerts from '../../hooks/useDesktopAlerts';
+import useTarefaAlerts from '../../hooks/useTarefaAlerts';
 
 const pageTitles = {
-  '/dashboard':               { titulo: 'Dashboard',              subtitulo: 'Visão geral do seu escritório'     },
+  '/dashboard':               { titulo: 'Dashboard',              subtitulo: ''                                  },
   '/processos':               { titulo: 'Processos',              subtitulo: 'Gerencie seus processos judiciais' },
   '/tarefas':                 { titulo: 'Tarefas',                subtitulo: 'Organize suas atividades'          },
   '/agenda':                  { titulo: 'Agenda',                 subtitulo: 'Prazos, tarefas e compromissos'    },
@@ -28,6 +31,8 @@ export default function Layout() {
 
   // Lembretes sonoros + visuais de eventos da agenda no horário marcado.
   useAgendaAlerts();
+  // Alerta de tarefas com prazo para hoje (som + toast + Windows) e badge.
+  const tarefasHoje = useTarefaAlerts();
 
   // ── Full data refresh when coming back online ──────────
   const refreshAllData = useCallback(async () => {
@@ -56,7 +61,7 @@ export default function Layout() {
   // Auto-sync: sync on mount (app open) + adaptive interval
   // Good connection: every 30 min | Slow: every 60 min | Offline: disabled
   useEffect(() => {
-    const doSync = async () => {
+    const doSync = async (mostrarToast = false) => {
       if (!isOnline) return;
       // Skip heavy sync on slow connections — just refresh cached queries
       if (connectionQuality === 'slow') {
@@ -66,10 +71,21 @@ export default function Layout() {
         return;
       }
       try {
-        await api.post('/processos/sincronizar-todos', {}, { timeout: 300000 });
+        const { data } = await api.post('/processos/sincronizar-todos', {}, { timeout: 300000 });
         qc.invalidateQueries({ queryKey: ['processos'] });
         qc.invalidateQueries({ queryKey: ['dashboard'] });
         qc.invalidateQueries({ queryKey: ['notif-count'] });
+        // Confirmação só na sincronização inicial (ao abrir), para não incomodar
+        // a cada ciclo automático.
+        if (mostrarToast) {
+          const novas = data?.atualizados || 0;
+          const procs = data?.processosAtualizados || 0;
+          if (novas > 0) {
+            toast.success(`${novas} atualização${novas > 1 ? 'ões' : ''} em ${procs} processo${procs > 1 ? 's' : ''}.`, { icon: '⚖️' });
+          } else if ((data?.total || 0) > 0) {
+            toast('Todos os processos sincronizados — nenhuma novidade.', { icon: '✅' });
+          }
+        }
       } catch {
         // Silent fail — sync is background operation
       }
@@ -78,7 +94,7 @@ export default function Layout() {
     if (!syncRef.current) {
       syncRef.current = true;
       // Delay initial sync by 5s to let the UI load first on slow connections
-      setTimeout(doSync, 5000);
+      setTimeout(() => doSync(true), 5000);
     }
 
     const syncInterval = connectionQuality === 'slow' ? 60 * 60 * 1000 : 30 * 60 * 1000;
@@ -94,7 +110,14 @@ export default function Layout() {
     queryKey: ['notif-count'],
     queryFn: () => api.get('/notificacoes?apenasNaoLidas=true&limite=1').then(r => r.data),
     refetchInterval: notifInterval,
+    // Continua contando mesmo com o app escondido na bandeja, para o badge da
+    // barra de tarefas refletir novas não lidas em segundo plano.
+    refetchIntervalInBackground: true,
   });
+
+  // Notificação nativa do Windows + som suave para novidades, e badge na
+  // barra de tarefas/bandeja com o total de não lidas.
+  useDesktopAlerts(notifData?.naoLidas || 0);
 
   // Count processes with unseen movimentações for sidebar badge
   const { data: processosAlertData } = useQuery({
@@ -121,7 +144,7 @@ export default function Layout() {
 
   return (
     <div className="flex min-h-screen bg-gold-gradient">
-      <Sidebar naoLidas={notifData?.naoLidas || 0} processosAlertas={processosComAlertas} onCollapse={setSidebarCollapsed} />
+      <Sidebar naoLidas={notifData?.naoLidas || 0} processosAlertas={processosComAlertas} tarefasAlertas={tarefasHoje} onCollapse={setSidebarCollapsed} />
       <main
         className="flex-1 flex flex-col min-h-screen transition-all duration-300"
         style={{ marginLeft: sidebarWidth }}

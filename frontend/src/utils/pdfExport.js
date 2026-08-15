@@ -123,7 +123,7 @@ export function buildLetterheadPage(config = {}, logoDataUrl = '', bodyHtml = ''
      ══════════════════════════════════════════════════════════════════ */
   .header {
     position: relative;
-    padding: 12mm 22mm 0 22mm;
+    padding: 12mm 20mm 0 30mm;
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -197,28 +197,38 @@ export function buildLetterheadPage(config = {}, logoDataUrl = '', bodyHtml = ''
 
   /* Linha dupla clássica */
   .header-rule {
-    margin: 6mm 22mm 0 22mm;
+    margin: 6mm 20mm 0 30mm;
     border-top: 1.2px solid ${cor};
     border-bottom: 0.4px solid ${cor};
     padding-bottom: 1.2mm;
   }
 
-  /* ── Corpo: flex:1 empurra o footer para o fim da página ── */
+  /* ── Corpo — padrão ABNT/forense ──
+     Margens ABNT: 3cm à esquerda, 2cm à direita. Fonte Times 12pt,
+     entrelinha 1,5, texto justificado, recuo de 1,25cm na 1ª linha
+     de cada parágrafo — como um escritório entrega. */
   .body-content {
     flex: 1;
-    padding: 10mm 22mm 8mm 22mm;
+    padding: 10mm 20mm 8mm 30mm;
     font-size: 12pt;
-    line-height: 1.75;
+    line-height: 1.5;
     text-align: justify;
     color: #1a1a1a;
     hyphens: auto;
   }
   .body-content p {
     text-align: inherit;
-    margin: 0 0 8pt 0;
+    text-indent: 1.25cm;
+    margin: 0 0 6pt 0;
     orphans: 3;
     widows: 3;
   }
+  /* Títulos, assinaturas e parágrafos centralizados não levam recuo. */
+  .body-content p.doc-title,
+  .body-content p.doc-subtitle,
+  .body-content p.doc-sig,
+  .body-content .ql-align-center,
+  .body-content .ql-align-right { text-indent: 0; }
   .body-content h1, .body-content h2, .body-content h3 {
     text-align: inherit;
     font-weight: bold;
@@ -269,7 +279,7 @@ export function buildLetterheadPage(config = {}, logoDataUrl = '', bodyHtml = ''
   .footer {
     position: relative;
     flex-shrink: 0;
-    padding: 0 22mm 10mm 22mm;
+    padding: 0 20mm 10mm 30mm;
     margin-top: 6mm;
   }
   .footer-rule {

@@ -158,13 +158,27 @@ async function me(req, res, next) {
 // PUT /api/auth/perfil
 async function atualizarPerfil(req, res, next) {
   try {
-    const { nome, oab, telefone, tema } = req.body;
+    const { nome, oab, telefone, tema, email } = req.body;
 
     const data = {};
     if (nome !== undefined) data.nome = nome;
     if (oab !== undefined) data.oab = oab || null;
     if (telefone !== undefined) data.telefone = telefone || null;
     if (tema !== undefined && ['ESCURO', 'CLARO'].includes(tema)) data.tema = tema;
+
+    // Troca de e-mail — valida formato e unicidade.
+    if (email !== undefined) {
+      const novoEmail = String(email).trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(novoEmail)) {
+        return res.status(400).json({ error: 'E-mail inválido.' });
+      }
+      const emUso = await prisma.usuario.findFirst({
+        where: { email: novoEmail, id: { not: req.usuario.id } },
+        select: { id: true },
+      });
+      if (emUso) return res.status(409).json({ error: 'Este e-mail já está em uso.' });
+      data.email = novoEmail;
+    }
 
     const usuario = await prisma.usuario.update({
       where: { id: req.usuario.id },

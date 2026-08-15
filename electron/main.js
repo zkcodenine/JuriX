@@ -1,9 +1,23 @@
 'use strict'
 
-const { app, BrowserWindow, dialog, shell, ipcMain } = require('electron')
+const { app, BrowserWindow, dialog, shell, ipcMain, Tray, Menu, Notification, nativeImage } = require('electron')
 const path = require('path')
 const http = require('http')
 const log = require('electron-log')
+
+// Identidade da app no Windows — necessária para o toast nativo mostrar o nome
+// e o ícone "JuriX" (e não "electron.app..."). Deve casar com o appId do build.
+app.setAppUserModelId('com.jurix.app')
+
+// Instância única: se o app já está aberto (inclusive escondido na bandeja),
+// uma segunda execução só traz a janela existente para a frente — evita dois
+// backends na mesma porta.
+const gotTheLock = app.requestSingleInstanceLock()
+if (!gotTheLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => mostrarJanela())
+}
 
 // ── Logging ───────────────────────────────────────────────────────────────────
 log.initialize()
@@ -20,6 +34,66 @@ const BACKEND_PORT = 3001
 let mainWindow = null
 let loadingWindow = null
 let backendProcess = null
+let tray = null
+let ultimasNaoLidas = 0
+let avisouBandeja = false
+
+// ── Bandeja (system tray) ─────────────────────────────────────────────────────
+function assetPath(file) {
+  return path.join(__dirname, 'assets', file)
+}
+
+// Caminho REAL em disco (fora do app.asar). O toast do Windows é desenhado pelo
+// SO, que não lê de dentro do asar — a imagem do logo precisa vir daqui. Em dev
+// (sem asar) o replace é inofensivo. Exige `electron/assets/**` em asarUnpack.
+function assetPathOnDisk(file) {
+  return assetPath(file).replace('app.asar' + path.sep, 'app.asar.unpacked' + path.sep)
+}
+
+function mostrarJanela() {
+  if (!mainWindow) { createMainWindow(); return }
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+  mainWindow.flashFrame(false)
+}
+
+function textoBandeja() {
+  return ultimasNaoLidas > 0
+    ? `JuriX — ${ultimasNaoLidas} não lida${ultimasNaoLidas > 1 ? 's' : ''}`
+    : 'JuriX — em dia'
+}
+
+function atualizarBandeja() {
+  if (!tray) return
+  const menu = Menu.buildFromTemplate([
+    { label: textoBandeja(), enabled: false },
+    { type: 'separator' },
+    { label: 'Abrir JuriX', click: () => mostrarJanela() },
+    { label: 'Sair', click: () => { app.isQuitting = true; app.quit() } },
+  ])
+  tray.setToolTip(textoBandeja())
+  tray.setContextMenu(menu)
+}
+
+function criarBandeja() {
+  if (tray) return
+  try {
+    tray = new Tray(assetPath('icon.ico'))
+    tray.on('click', () => mostrarJanela())
+    tray.on('double-click', () => mostrarJanela())
+    atualizarBandeja()
+  } catch (err) {
+    log.warn('[Tray] não foi possível criar a bandeja:', err.message)
+  }
+}
+
+// Escapa texto para uso seguro dentro do XML do toast.
+function escaparXml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&apos;')
+}
 
 // ── Path helpers ──────────────────────────────────────────────────────────────
 // Usa process.resourcesPath apenas quando o app está empacotado (isPackaged).
@@ -165,8 +239,8 @@ async function startBackend() {
 // ── Loading window ────────────────────────────────────────────────────────────
 function createLoadingWindow() {
   loadingWindow = new BrowserWindow({
-    width: 480,
-    height: 300,
+    width: 640,
+    height: 480,
     frame: false,
     resizable: false,
     center: true,
@@ -197,6 +271,10 @@ function createMainWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: true,
+      // Mantém timers e áudio vivos quando a janela está escondida na bandeja —
+      // é o que permite o polling de notificações e o som suave continuarem
+      // funcionando em segundo plano.
+      backgroundThrottling: false,
     },
   })
 
@@ -227,6 +305,28 @@ function createMainWindow() {
   })
 
   mainWindow.on('closed', () => { mainWindow = null })
+
+  // Fechar (X) NÃO encerra o app — esconde na bandeja e segue em segundo plano,
+  // recebendo/monitorando notificações. Só sai de verdade pelo menu "Sair" da
+  // bandeja (ou durante uma atualização).
+  mainWindow.on('close', (e) => {
+    if (app.isQuitting || global.__jurixUpdating) return
+    e.preventDefault()
+    mainWindow.hide()
+    if (!avisouBandeja) {
+      avisouBandeja = true
+      try {
+        tray?.displayBalloon?.({
+          icon: assetPath('icon.ico'),
+          title: 'JuriX continua rodando',
+          content: 'O sistema segue em segundo plano na bandeja, avisando quando houver novidades. Clique no ícone para reabrir.',
+        })
+      } catch (_) {}
+    }
+  })
+
+  // Ao focar a janela, para de piscar na barra de tarefas.
+  mainWindow.on('focus', () => mainWindow.flashFrame(false))
 
   // Sem barra de menu em produção
   if (!isDev) mainWindow.setMenuBarVisibility(false)
@@ -282,13 +382,84 @@ ipcMain.on('updater-action', (_e, action) => {
   }
 })
 
+// ── IPC: notificação nativa do Windows (toast temático) ───────────────────────
+// O renderer chama isto quando detecta uma notificação nova. Se a janela já
+// está em foco, não incomoda com toast (o badge interno já mostra). Caso
+// contrário: toast com o logo circular do JuriX + pisca a barra de tarefas.
+ipcMain.on('jurix-notify', (_e, payload) => {
+  try {
+    if (!Notification.isSupported()) return
+    if (mainWindow && mainWindow.isFocused()) return
+
+    const { titulo, corpo, processoId } = payload || {}
+    let options
+
+    if (process.platform === 'win32') {
+      // Toast adaptativo do Windows: logo do app recortado em círculo, título,
+      // corpo e a assinatura "JuriX". Áudio silenciado — o som suave é tocado
+      // pelo próprio app (Web Audio), para termos controle total do timbre.
+      const logo = assetPathOnDisk('icon.png').replace(/\\/g, '/')
+      const toastXml = [
+        '<toast activationType="foreground" scenario="default">',
+        '  <visual>',
+        '    <binding template="ToastGeneric">',
+        `      <image placement="appLogoOverride" hint-crop="circle" src="file:///${logo}"/>`,
+        `      <text>${escaparXml(titulo || 'JuriX')}</text>`,
+        `      <text>${escaparXml(corpo || '')}</text>`,
+        '      <text placement="attribution">JuriX</text>',
+        '    </binding>',
+        '  </visual>',
+        '  <audio silent="true"/>',
+        '</toast>',
+      ].join('\n')
+      options = { toastXml }
+    } else {
+      options = { title: titulo || 'JuriX', body: corpo || '', icon: assetPath('icon.png'), silent: true }
+    }
+
+    const n = new Notification(options)
+    n.on('click', () => {
+      mostrarJanela()
+      if (processoId) mainWindow?.webContents.send('jurix-abrir-processo', processoId)
+    })
+    n.show()
+
+    // Pisca a barra de tarefas se a janela não está visível/focada.
+    if (mainWindow && !mainWindow.isFocused()) mainWindow.flashFrame(true)
+  } catch (err) {
+    log.warn('[Notify] falha ao exibir toast:', err.message)
+  }
+})
+
+// ── IPC: badge de não lidas (barra de tarefas + bandeja) ──────────────────────
+ipcMain.on('jurix-badge', (_e, n) => {
+  ultimasNaoLidas = Number(n) || 0
+  atualizarBandeja()
+  if (!mainWindow) return
+  try {
+    if (ultimasNaoLidas > 0) {
+      const badge = nativeImage.createFromPath(assetPath('badge.png'))
+      mainWindow.setOverlayIcon(badge, `${ultimasNaoLidas} não lida(s)`)
+    } else {
+      mainWindow.setOverlayIcon(null, '')
+    }
+  } catch (_) { /* overlay indisponível — ignora */ }
+})
+
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
+  // Segunda instância: já pedimos app.quit() acima, mas o whenReady ainda pode
+  // disparar. Sem este guard, a 2ª instância subiria OUTRO backend na porta
+  // 3001 — que é exatamente o que causava o "servidor interno parou (código 0)"
+  // quando o app abria duas vezes. Aborta aqui e deixa a 1ª instância no ar.
+  if (!gotTheLock) return
+
   createLoadingWindow()
 
   try {
     await startBackend()
     const win = createMainWindow()
+    criarBandeja()
 
     if (!isDev) {
       const { setupAutoUpdater } = require('./updater')

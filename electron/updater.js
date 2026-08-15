@@ -15,6 +15,15 @@ autoUpdater.allowDowngrade = false
 // Garante que o instalador rode em modo silencioso
 autoUpdater.disableWebInstaller = true
 
+// ── Confiabilidade > banda ────────────────────────────────────────────────────
+// Download diferencial (por blockmap) é a causa nº 1 de atualização que "trava"
+// no Windows: se o blockmap da versão instalada não bate, o electron-updater
+// entra em loop de retry e a atualização nunca conclui. Baixar o instalador
+// inteiro é maior, mas SEMPRE funciona — que é o que o cliente precisa.
+autoUpdater.disableDifferentialDownload = true
+// Evita servir um instalador/latest.yml velho do cache de CDN/proxy.
+autoUpdater.requestHeaders = { 'Cache-Control': 'no-cache' }
+
 // ── Assinatura de código ─────────────────────────────────────────────────────
 // O app NÃO é assinado com certificado. Sem isto, o electron-updater rejeita o
 // instalador ("not signed by the application owner") e entra em loop infinito
@@ -40,6 +49,8 @@ function setupAutoUpdater(mainWindow) {
   let hasPromptedInstall = false
   let isQuittingToInstall = false
   let lastDownloadedVersion = null
+  let lastProgressAt = 0
+  let stallTimer = null
 
   function send(event, data = {}) {
     try {
@@ -60,12 +71,40 @@ function setupAutoUpdater(mainWindow) {
     }
     isChecking = true
     log.info('[Updater] Checking for updates...')
+    // Timeout de segurança: se a rede pendurar, não deixa o guard travado —
+    // libera e reagenda, em vez de nunca mais checar.
+    const timeout = setTimeout(() => {
+      if (isChecking) {
+        log.warn('[Updater] Check timed out (rede lenta?) — reagendando.')
+        isChecking = false
+        scheduleRetry()
+      }
+    }, 60000)
     autoUpdater.checkForUpdates()
       .catch((err) => {
         log.warn('[Updater] Check failed:', err.message)
         scheduleRetry()
       })
-      .finally(() => { isChecking = false })
+      .finally(() => { clearTimeout(timeout); isChecking = false })
+  }
+
+  // ── Watchdog de download travado ──────────────────────────────────────────
+  // Se o download parar de progredir por 2 min, reinicia o ciclo (com o
+  // download diferencial já desligado, uma nova tentativa baixa do zero e sai
+  // do estado travado).
+  function iniciarWatchdogDownload() {
+    lastProgressAt = Date.now()
+    clearInterval(stallTimer)
+    stallTimer = setInterval(() => {
+      if (!isDownloading) { clearInterval(stallTimer); return }
+      if (Date.now() - lastProgressAt > 120000) {
+        log.warn('[Updater] Download travado (>2min sem progresso) — reiniciando.')
+        clearInterval(stallTimer)
+        isDownloading = false
+        send('error', { message: 'Download travado — tentando novamente.' })
+        scheduleRetry()
+      }
+    }, 20000)
   }
 
   function scheduleRetry() {
@@ -87,6 +126,7 @@ function setupAutoUpdater(mainWindow) {
     updateVersion = info.version
     isDownloading = true // bloqueia checks concorrentes enquanto baixa
     retryCount = 0
+    iniciarWatchdogDownload()
     send('available', { version: info.version })
   })
 
@@ -98,6 +138,7 @@ function setupAutoUpdater(mainWindow) {
 
   // ── Progresso do download ────────────────────────────────────────────────
   autoUpdater.on('download-progress', (progress) => {
+    lastProgressAt = Date.now()
     const pct = Math.round(progress.percent)
     send('progress', {
       percent: pct,
@@ -112,6 +153,7 @@ function setupAutoUpdater(mainWindow) {
   autoUpdater.on('update-downloaded', (info) => {
     log.info('[Updater] Update downloaded:', info.version)
     isDownloading = false
+    clearInterval(stallTimer)
 
     // Evita disparar 2x para a mesma versão
     if (hasPromptedInstall && lastDownloadedVersion === info.version) {
@@ -176,6 +218,24 @@ function setupAutoUpdater(mainWindow) {
         } catch (err) {
           log.error('[Updater] quitAndInstall failed:', err.message)
           isQuittingToInstall = false
+          // Fallback: se a instalação silenciosa falhar, o usuário não fica preso —
+          // oferece baixar manualmente a última versão.
+          try {
+            const { shell } = require('electron')
+            dialog.showMessageBox(parentWin, {
+              type: 'warning',
+              title: 'Atualização — JuriX',
+              message: 'Não foi possível instalar automaticamente.',
+              detail: 'Clique em "Baixar atualização" para instalar a nova versão manualmente.',
+              buttons: ['Baixar atualização', 'Depois'],
+              defaultId: 0,
+              noLink: true,
+            }).then((r) => {
+              if (r.response === 0) {
+                shell.openExternal('https://github.com/zkcodenine/JuriX/releases/latest')
+              }
+            }).catch(() => {})
+          } catch (_) {}
         }
       })
     }
@@ -196,6 +256,7 @@ function setupAutoUpdater(mainWindow) {
   autoUpdater.on('error', (err) => {
     log.warn('[Updater] Error:', err.message)
     isDownloading = false
+    clearInterval(stallTimer)
     send('error', { message: err.message })
     scheduleRetry()
   })

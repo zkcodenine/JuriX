@@ -307,7 +307,6 @@ export default function TabMovimentacoes({ processo }) {
                         ? 'linear-gradient(135deg, rgba(34,211,238,.06), rgba(34,211,238,.02))'
                         : 'rgba(255,255,255,.03)',
                       border: `1px solid ${isRecent ? 'rgba(34,211,238,.2)' : 'var(--border)'}`,
-                      borderLeft: isRecent ? '3px solid #22d3ee' : isTjmg ? '3px solid rgba(34,211,238,.4)' : '1px solid var(--border)',
                     }}
                   >
                     <div className="flex items-start justify-between gap-2 mb-1">

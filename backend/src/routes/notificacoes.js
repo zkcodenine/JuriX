@@ -16,6 +16,15 @@ router.get('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Notificações não lidas criadas depois de ?desde=<ISO> — usada pelo alerta
+// de desktop (som suave + toast nativo do Windows).
+router.get('/recentes', async (req, res, next) => {
+  try {
+    const items = await notificationService.listarNaoLidasDesde(req.usuario.id, req.query.desde);
+    res.json(items);
+  } catch (err) { next(err); }
+});
+
 router.patch('/:id/ler', async (req, res, next) => {
   try {
     await notificationService.marcarComoLida(req.params.id, req.usuario.id);

@@ -54,6 +54,8 @@ export default function ProcessoDetail() {
   const [showCompartilhar, setShowCompartilhar] = useState(false);
   const [showEdit,      setShowEdit]      = useState(false);
   const [editForm,      setEditForm]      = useState(null);
+  const [showCobranca,  setShowCobranca]  = useState(false);
+  const [contatos,      setContatos]      = useState([{ nome: '', endereco: '', whatsapp: '' }]);
   const [showDelete,    setShowDelete]    = useState(false);
   const [showInfoExtra, setShowInfoExtra] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
@@ -148,6 +150,16 @@ export default function ProcessoDetail() {
       setShowEdit(false);
     },
     onError: (e) => toast.error(e.response?.data?.error || 'Erro ao salvar alterações'),
+  });
+
+  const cobrancaMutation = useMutation({
+    mutationFn: (dados) => api.put(`/processos/${id}`, dados),
+    onSuccess: () => {
+      qc.invalidateQueries(['processo', id]);
+      toast.success('Dados de cobrança salvos!');
+      setShowCobranca(false);
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Erro ao salvar'),
   });
 
   const abrirEdit = () => {
@@ -247,7 +259,56 @@ export default function ProcessoDetail() {
                 <i className="fas fa-pen text-[11px]" style={{ color: 'var(--text-secondary)' }} />
               </button>
               )}
+              {/* Dados de cobrança */}
+              <button
+                onClick={() => {
+                  const existentes = Array.isArray(processo.cobrancaContatos) && processo.cobrancaContatos.length
+                    ? processo.cobrancaContatos
+                    : processo.cobrancaNome
+                      ? [{ nome: processo.cobrancaNome, endereco: processo.cobrancaEndereco || '', whatsapp: processo.cobrancaWhatsapp || '' }]
+                      : [{ nome: '', endereco: '', whatsapp: '' }];
+                  setContatos(existentes.map(c => ({ nome: c.nome || '', endereco: c.endereco || '', whatsapp: c.whatsapp || '' })));
+                  setShowCobranca(true);
+                }}
+                className="flex items-center justify-center rounded-xl hover:opacity-70 transition-opacity"
+                style={{ width: 28, height: 28, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.1)' }}
+                title="Dados de cobrança"
+              >
+                <i className="fas fa-file-invoice-dollar text-[11px]" style={{ color: 'var(--text-secondary)' }} />
+              </button>
             </div>
+
+            {/* Cobrança: um retângulo por contato (nome + WhatsApp juntos),
+                alinhados à direita. Suporta múltiplos contatos. */}
+            {(() => {
+              const lista = Array.isArray(processo.cobrancaContatos) && processo.cobrancaContatos.length
+                ? processo.cobrancaContatos
+                : processo.cobrancaNome
+                  ? [{ nome: processo.cobrancaNome, endereco: processo.cobrancaEndereco, whatsapp: processo.cobrancaWhatsapp }]
+                  : [];
+              if (!lista.length) return null;
+              return (
+                <div className="flex flex-wrap justify-end gap-1.5 mt-2">
+                  {lista.filter(c => c.nome).map((c, i) => (
+                    <div key={i} className="inline-flex items-center gap-2 pl-2.5 pr-1 py-1 rounded-lg" style={{ background: 'rgba(255,255,255,.04)', border: '1px solid var(--border)' }}>
+                      <i className="fas fa-user text-[10px]" style={{ color: 'var(--accent)' }} />
+                      <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{c.nome}</span>
+                      {c.whatsapp && (
+                        <a
+                          href={`https://wa.me/${String(c.whatsapp).replace(/\D/g, '').replace(/^0+/, '').replace(/^(?!55)/, '55')}`}
+                          target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-md transition-all hover:opacity-85"
+                          style={{ background: 'rgba(37,211,102,.14)', border: '1px solid rgba(37,211,102,.35)', color: '#25D366' }}
+                          title="Chamar no WhatsApp"
+                        >
+                          <i className="fab fa-whatsapp text-sm" /> WhatsApp
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
             <p className="text-sm font-mono mb-1" style={{ color: 'var(--text-muted)' }}>
               {formatarNumeroCNJ(processo.numeroCnj || processo.numero)}
             </p>
@@ -701,6 +762,70 @@ export default function ProcessoDetail() {
         />
       )}
 
+      {/* ─── Modal dados de cobrança ──────────────── */}
+      {showCobranca && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-y-auto"
+          style={{ background: 'rgba(0,0,0,.88)', backdropFilter: 'blur(8px)' }}
+          onClick={e => e.target === e.currentTarget && setShowCobranca(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl overflow-hidden animate-scaleIn my-auto"
+            style={{ background: 'var(--glass-bg, rgba(10,17,40,.96))', backdropFilter: 'blur(24px) saturate(1.3)', WebkitBackdropFilter: 'blur(24px) saturate(1.3)', border: '1px solid rgba(255,255,255,.1)' }}
+          >
+            <div className="flex justify-between items-center px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <h3 className="text-lg font-bold">Dados de cobrança</h3>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Um ou mais contatos do cliente</p>
+              </div>
+              <button onClick={() => setShowCobranca(false)} className="flex items-center justify-center rounded-xl hover:opacity-70 transition-opacity" style={{ width: 34, height: 34, background: 'rgba(255,255,255,.03)' }}>
+                <i className="fas fa-xmark" style={{ color: 'var(--text-secondary)' }} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4 overflow-y-auto" style={{ maxHeight: '55vh' }}>
+              {contatos.map((c, i) => (
+                <div key={i} className="rounded-xl p-3 space-y-2.5" style={{ background: 'rgba(255,255,255,.03)', border: '1px solid var(--border)' }}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Contato {i + 1}</span>
+                    {contatos.length > 1 && (
+                      <button onClick={() => setContatos(cs => cs.filter((_, idx) => idx !== i))} title="Remover contato" className="text-xs" style={{ color: '#ef4444' }}>
+                        <i className="fas fa-trash" />
+                      </button>
+                    )}
+                  </div>
+                  <input className="input-base" placeholder="Nome do contato" value={c.nome}
+                    onChange={e => setContatos(cs => cs.map((x, idx) => idx === i ? { ...x, nome: e.target.value } : x))} />
+                  <input className="input-base" placeholder="Endereço (rua, número, cidade)" value={c.endereco}
+                    onChange={e => setContatos(cs => cs.map((x, idx) => idx === i ? { ...x, endereco: e.target.value } : x))} />
+                  <input className="input-base" placeholder="WhatsApp com DDD — (00) 00000-0000" value={c.whatsapp}
+                    onChange={e => setContatos(cs => cs.map((x, idx) => idx === i ? { ...x, whatsapp: e.target.value } : x))} />
+                </div>
+              ))}
+              <button onClick={() => setContatos(cs => [...cs, { nome: '', endereco: '', whatsapp: '' }])}
+                className="btn btn-ghost w-full text-sm">
+                <i className="fas fa-plus" /> Adicionar outro contato
+              </button>
+            </div>
+            <div className="flex gap-2 justify-end px-6 py-4" style={{ borderTop: '1px solid var(--border)' }}>
+              <button onClick={() => setShowCobranca(false)} className="btn btn-ghost">Cancelar</button>
+              <button onClick={() => {
+                const limpos = contatos.filter(c => c.nome.trim());
+                cobrancaMutation.mutate({
+                  cobrancaContatos: limpos,
+                  // Mantém os campos antigos em sincronia com o 1º contato (compat).
+                  cobrancaNome: limpos[0]?.nome || '',
+                  cobrancaEndereco: limpos[0]?.endereco || '',
+                  cobrancaWhatsapp: limpos[0]?.whatsapp || '',
+                });
+              }} disabled={cobrancaMutation.isPending} className="btn btn-gold">
+                {cobrancaMutation.isPending ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <i className="fas fa-check" />} Salvar
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* ─── Modal editar processo ────────────────── */}
       {showEdit && editForm && createPortal(
         <div
@@ -744,19 +869,6 @@ export default function ProcessoDetail() {
                   onChange={setEF('clienteNome')}
                 />
               </div>
-
-              {processo.numeroCnj && (
-                <div
-                  className="flex items-start gap-3 px-3 py-3 rounded-xl text-xs mt-3"
-                  style={{ background: 'rgba(201,168,76,.06)', border: '1px solid rgba(201,168,76,.18)', color: 'var(--text-secondary)' }}
-                >
-                  <i className="fas fa-satellite-dish flex-shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} />
-                  <span>
-                    Processo vinculado ao CNJ. <br />
-                    <span style={{ color: 'var(--text-muted)' }}>O nome alterado será salvo localmente. Partes oficiais não são alteradas no CNJ.</span>
-                  </span>
-                </div>
-              )}
 
               {/* Número — read-only se CNJ */}
               {!processo.numeroCnj && (

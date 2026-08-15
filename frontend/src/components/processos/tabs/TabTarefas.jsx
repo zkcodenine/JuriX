@@ -13,11 +13,10 @@ function TarefaItem({ tarefa, isDone, isOverdue, index, onToggle, onDelete }) {
   const [open, setOpen] = useState(false);
   return (
     <div
-      className="rounded-xl overflow-hidden transition-all animate-fadeIn"
+      className="rounded-xl overflow-hidden transition-all duration-300 animate-fadeIn hover:-translate-y-0.5"
       style={{
         background: 'rgba(255,255,255,.03)',
         border: `1px solid ${open ? 'var(--accent-border, rgba(201,168,76,.3))' : 'var(--border)'}`,
-        borderLeft: `3px solid ${priorCor[tarefa.prioridade]}`,
         animationDelay: `${index * 30}ms`,
         opacity: isDone ? 0.6 : 1,
       }}

@@ -181,7 +181,8 @@ async function deletarEventoGoogle(usuarioId, googleEventId) {
 function montarEventoPrazo(tarefa) {
   const d = new Date(tarefa.prazo);
   const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  const inicio = new Date(`${dateStr}T09:00:00-03:00`);
+  const hhmm = /^\d{2}:\d{2}/.test(tarefa.horario || '') ? String(tarefa.horario).slice(0, 5) : '09:00';
+  const inicio = new Date(`${dateStr}T${hhmm}:00-03:00`);
   const fim = new Date(inicio.getTime() + 30 * 60 * 1000);
   return {
     summary: `⚖️ Prazo: ${tarefa.titulo}`,
@@ -219,6 +220,89 @@ async function sincronizarPrazoTarefa(usuarioId, tarefa) {
   }
 }
 
+// ─── Prazos de PROCESSO → Google Agenda ───────────────────────────────────
+// Evento às 09:00 (America/Sao_Paulo) no dia do vencimento, lembretes 1 dia
+// antes e no próprio dia. Espelha o comportamento dos prazos de tarefa.
+function montarEventoPrazoProcesso(prazo) {
+  const d = new Date(prazo.dataVencimento);
+  const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const hhmm = /^\d{2}:\d{2}/.test(prazo.horario || '') ? String(prazo.horario).slice(0, 5) : '09:00';
+  const inicio = new Date(`${dateStr}T${hhmm}:00-03:00`);
+  const fim = new Date(inicio.getTime() + 30 * 60 * 1000);
+  return {
+    summary: `⚖️ Prazo: ${prazo.titulo}`,
+    description: prazo.descricao || 'Prazo processual do JuriX',
+    start: { dateTime: inicio.toISOString(), timeZone: 'America/Sao_Paulo' },
+    end: { dateTime: fim.toISOString(), timeZone: 'America/Sao_Paulo' },
+    reminders: {
+      useDefault: false,
+      overrides: [
+        { method: 'popup', minutes: 1440 }, // 1 dia antes
+        { method: 'popup', minutes: 0 },    // no dia do vencimento (09:00)
+      ],
+    },
+  };
+}
+
+// Cria ou atualiza o evento de prazo de processo no Google. Retorna googleEventId.
+async function sincronizarPrazoProcesso(usuarioId, prazo) {
+  try {
+    if (!isConfigured() || !prazo.dataVencimento) return prazo.googleEventId || null;
+    const auth = await clienteDoUsuario(usuarioId);
+    if (!auth) return prazo.googleEventId || null;
+    const calendar = google.calendar({ version: 'v3', auth });
+    const requestBody = montarEventoPrazoProcesso(prazo);
+
+    if (prazo.googleEventId) {
+      await calendar.events.update({ calendarId: 'primary', eventId: prazo.googleEventId, requestBody });
+      return prazo.googleEventId;
+    }
+    const { data } = await calendar.events.insert({ calendarId: 'primary', requestBody });
+    return data.id || null;
+  } catch (err) {
+    logger.warn(`Google Calendar (prazo processo) falhou: ${err.message}`);
+    return prazo.googleEventId || null;
+  }
+}
+
+// ─── Vencimento de PARCELA de honorário → Google Agenda ───────────────────
+// Evento no dia do vencimento com lembrete popup no dia e `diasAntes` antes,
+// conforme o usuário definiu ao cadastrar o honorário.
+function montarEventoParcela({ vencimento, cliente, valor, diasAntes }) {
+  const d = new Date(vencimento);
+  const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const inicio = new Date(`${dateStr}T09:00:00-03:00`);
+  const fim = new Date(inicio.getTime() + 30 * 60 * 1000);
+  const overrides = [{ method: 'popup', minutes: 0 }];
+  if (diasAntes > 0) overrides.unshift({ method: 'popup', minutes: diasAntes * 1440 });
+  return {
+    summary: `💰 Honorário: ${cliente} — ${valor}`,
+    description: 'Vencimento de parcela de honorário (JuriX)',
+    start: { dateTime: inicio.toISOString(), timeZone: 'America/Sao_Paulo' },
+    end: { dateTime: fim.toISOString(), timeZone: 'America/Sao_Paulo' },
+    reminders: { useDefault: false, overrides },
+  };
+}
+
+async function sincronizarParcela(usuarioId, parcela, info) {
+  try {
+    if (!isConfigured() || !parcela.vencimento) return parcela.googleEventId || null;
+    const auth = await clienteDoUsuario(usuarioId);
+    if (!auth) return parcela.googleEventId || null;
+    const calendar = google.calendar({ version: 'v3', auth });
+    const requestBody = montarEventoParcela({ vencimento: parcela.vencimento, ...info });
+    if (parcela.googleEventId) {
+      await calendar.events.update({ calendarId: 'primary', eventId: parcela.googleEventId, requestBody });
+      return parcela.googleEventId;
+    }
+    const { data } = await calendar.events.insert({ calendarId: 'primary', requestBody });
+    return data.id || null;
+  } catch (err) {
+    logger.warn(`Google Calendar (parcela) falhou: ${err.message}`);
+    return parcela.googleEventId || null;
+  }
+}
+
 module.exports = {
   isConfigured,
   gerarAuthUrl,
@@ -228,4 +312,6 @@ module.exports = {
   atualizarEventoGoogle,
   deletarEventoGoogle,
   sincronizarPrazoTarefa,
+  sincronizarPrazoProcesso,
+  sincronizarParcela,
 };

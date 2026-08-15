@@ -21,7 +21,9 @@ const planBadge = {
 };
 
 function NavItem({ item, collapsed, naoLidas = 0, badgeCount = 0 }) {
-  const showBadge = (item.path === '/notificacoes' && naoLidas > 0) || (item.path === '/processos' && badgeCount > 0);
+  const showBadge =
+    (item.path === '/notificacoes' && naoLidas > 0) ||
+    ((item.path === '/processos' || item.path === '/tarefas') && badgeCount > 0);
   const count = item.path === '/notificacoes' ? naoLidas : badgeCount;
   return (
     <NavLink
@@ -77,7 +79,7 @@ function NavItem({ item, collapsed, naoLidas = 0, badgeCount = 0 }) {
   );
 }
 
-export default function Sidebar({ naoLidas = 0, processosAlertas = 0, onCollapse }) {
+export default function Sidebar({ naoLidas = 0, processosAlertas = 0, tarefasAlertas = 0, onCollapse }) {
   const { usuario, logout } = useAuthStore();
   const ehAdminGlobal = usuario?.perfil === 'ADMIN_GLOBAL';
   const { theme, toggleTheme } = useThemeStore();
@@ -248,7 +250,7 @@ export default function Sidebar({ naoLidas = 0, processosAlertas = 0, onCollapse
           )}
 
           {navItems.map(item => (
-            <NavItem key={item.path} item={item} collapsed={collapsed} naoLidas={naoLidas} badgeCount={item.path === '/processos' ? processosAlertas : 0} />
+            <NavItem key={item.path} item={item} collapsed={collapsed} naoLidas={naoLidas} badgeCount={item.path === '/processos' ? processosAlertas : item.path === '/tarefas' ? tarefasAlertas : 0} />
           ))}
 
           <div className="my-2 mx-1" style={{ height: 1, background: 'var(--border)' }} />

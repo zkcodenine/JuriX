@@ -101,6 +101,14 @@ export default function useAgendaAlerts() {
 
         playAlertSound();
         mostrarLembrete(ev);
+        // Notificação nativa do Windows (quando rodando no app e fora de foco).
+        if (typeof document === 'undefined' || !document.hasFocus()) {
+          window.jurixDesktop?.notify?.({
+            titulo: 'Lembrete de agenda',
+            corpo: `${ev.titulo} — ${ev.horario}${ev.etiqueta?.nome ? ` · ${ev.etiqueta.nome}` : ''}`,
+            tipo: 'AGENDA',
+          });
+        }
       }
     };
 

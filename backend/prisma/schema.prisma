@@ -53,9 +53,24 @@ model Usuario {
   modelosDocumento ModeloDocumento[]
   etiquetasAgenda  EtiquetaAgenda[]
   eventosAgenda    EventoAgenda[]
+  tiposPrazo       TipoPrazoUsuario[]
 
   @@index([unidadeId])
   @@map("usuarios")
+}
+
+// Tipos de prazo personalizados pelo usuário (além dos padrões).
+model TipoPrazoUsuario {
+  id        String   @id @default(uuid())
+  usuarioId String
+  nome      String
+  criadoEm  DateTime @default(now())
+
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, nome])
+  @@index([usuarioId])
+  @@map("tipos_prazo_usuario")
 }
 
 // Escritório. Um usuário pertence a no máximo uma unidade.
@@ -153,6 +168,12 @@ model Processo {
   origemDados           String?             @default("manual")
   monitoramentoAtivo    Boolean             @default(false)
   observacoes           String?
+  // Dados de cobrança do cliente (para contato/WhatsApp).
+  cobrancaNome          String?
+  cobrancaEndereco      String?
+  cobrancaWhatsapp      String?
+  // Múltiplos contatos de cobrança: [{ nome, endereco, whatsapp }]
+  cobrancaContatos      Json?
   criadoEm             DateTime            @default(now())
   atualizadoEm         DateTime            @updatedAt
 
@@ -172,6 +193,7 @@ model Processo {
   @@index([usuarioId])
   @@index([numeroCnj])
   @@index([status])
+  @@index([usuarioId, criadoEm])
   @@map("processos")
 }
 
@@ -239,6 +261,7 @@ model Movimentacao {
 
   @@index([processoId])
   @@index([data])
+  @@index([processoId, data])
   @@map("movimentacoes")
 }
 
@@ -253,7 +276,9 @@ model Tarefa {
   prioridade  Prioridade    @default(MEDIA)
   status      StatusTarefa  @default(PENDENTE)
   observacaoConclusao String? @db.Text
+  horario     String?       // HH:MM do lembrete (usado na Google Agenda)
   googleEventId String?     // ID do prazo espelhado na Google Agenda
+  googleSync  Boolean       @default(true)  // sincronizar com a Google Agenda
   criadoEm   DateTime      @default(now())
   atualizadoEm DateTime    @updatedAt
 
@@ -264,6 +289,7 @@ model Tarefa {
   @@index([processoId])
   @@index([usuarioId])
   @@index([status])
+  @@index([usuarioId, status])
   @@map("tarefas")
 }
 
@@ -305,12 +331,16 @@ model Prazo {
   tipo        TipoPrazo   @default(PROCESSUAL)
   status      StatusPrazo @default(PENDENTE)
   alertaDias  Int         @default(3)
+  horario     String?     // HH:MM do lembrete (usado na Google Agenda)
+  googleEventId String?   // ID do prazo espelhado na Google Agenda
+  googleSync  Boolean     @default(true)  // sincronizar com a Google Agenda
   criadoEm   DateTime    @default(now())
 
   processo    Processo    @relation(fields: [processoId], references: [id], onDelete: Cascade)
 
   @@index([processoId])
   @@index([dataVencimento])
+  @@index([status, dataVencimento])
   @@map("prazos")
 }
 
@@ -340,9 +370,32 @@ model Documento {
   criadoEm   DateTime @default(now())
 
   processo    Processo @relation(fields: [processoId], references: [id], onDelete: Cascade)
+  conteudo    DocumentoConteudo?
 
   @@index([processoId])
   @@map("documentos")
+}
+
+// ─── Conteúdo binário do documento ─────────────────
+// Os BYTES do arquivo moram AQUI, no MySQL compartilhado — não mais no disco
+// local de quem subiu. É isso que faz o anexo de um usuário ser visível para
+// os outros de um processo compartilhado: o download lê do banco, que ambos
+// os backends alcançam. Tabela separada (1-1) para a listagem de documentos
+// continuar leve — o blob só é carregado no endpoint de download.
+//
+// `comprimido`: quando true, `conteudo` está em gzip (zlib). Aplicamos
+// compressão SEM PERDA (lossless) para não degradar o documento — nunca
+// recompressão com perda em prova/petição. Se o gzip não reduzir (ex.: PDF/JPG
+// já comprimidos), guardamos os bytes crus e comprimido=false.
+model DocumentoConteudo {
+  documentoId       String   @id
+  conteudo          Bytes    @db.LongBlob
+  comprimido        Boolean  @default(false)
+  tamanhoArmazenado Int?     // bytes efetivamente gravados (pós-compressão)
+
+  documento         Documento @relation(fields: [documentoId], references: [id], onDelete: Cascade)
+
+  @@map("documentos_conteudo")
 }
 
 // ─── Honorários ────────────────────────────────────
@@ -352,6 +405,11 @@ model Honorario {
   valorTotal   Decimal   @db.Decimal(15, 2)
   descricao    String?
   status       String    @default("pendente")
+  // Sincroniza os vencimentos com a Google Agenda (padrão: sim).
+  googleSync         Boolean @default(true)
+  // Notificar antes do vencimento das parcelas e quantos dias antes.
+  notificarVencimento Boolean @default(true)
+  notificarDiasAntes  Int     @default(3)
   criadoEm    DateTime  @default(now())
   atualizadoEm DateTime  @updatedAt
 
@@ -371,11 +429,13 @@ model Parcela {
   status       StatusParcela @default(PENDENTE)
   dataPagamento DateTime?
   observacao   String?
+  googleEventId String?      // vencimento espelhado na Google Agenda
   criadoEm    DateTime      @default(now())
 
   honorario    Honorario     @relation(fields: [honorarioId], references: [id], onDelete: Cascade)
 
   @@index([honorarioId])
+  @@index([status, vencimento])
   @@map("parcelas")
 }
 
@@ -417,6 +477,7 @@ model Notificacao {
 
   @@index([usuarioId])
   @@index([lida])
+  @@index([usuarioId, criadoEm])
   @@map("notificacoes")
 }
 

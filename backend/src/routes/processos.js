@@ -14,6 +14,7 @@ router.get('/', ctrl.listar);
 router.post('/', auditLog('CRIAR', 'PROCESSO'), ctrl.criar);
 router.get('/busca',         ctrl.buscar);
 router.get('/prazos-agenda', ctrl.prazosAgenda);
+router.get('/parcelas-agenda', ctrl.parcelasAgenda);
 router.get('/movimentacoes-agenda', ctrl.movimentacoesAgenda);
 router.get('/:id', ctrl.obter);
 router.put('/:id', auditLog('ATUALIZAR', 'PROCESSO'), ctrl.atualizar);

@@ -5,7 +5,7 @@
 //  tribunais (TJMG, DataJud, futuros).
 // ══════════════════════════════════════════════════════
 const cron = require('node-cron');
-const { executarMonitoramento, verificarPrazos } = require('../services/processMonitorService');
+const { executarMonitoramento, verificarPrazos, verificarParcelas } = require('../services/processMonitorService');
 const tribunalRegistry = require('../services/tribunalRegistry');
 const logger = require('../config/logger');
 
@@ -58,20 +58,22 @@ function startProcessMonitor() {
     }
   });
 
-  // ─── Verificação de prazos diária (08:00) ──────────
+  // ─── Verificação de prazos + parcelas diária (08:00) ──
   cron.schedule('0 8 * * *', async () => {
-    logger.info('⏰ Prazo Monitor Job: verificando prazos próximos...');
+    logger.info('⏰ Prazo Monitor Job: verificando prazos e parcelas...');
     try {
       await verificarPrazos();
+      await verificarParcelas();
     } catch (err) {
       logger.error('Prazo Monitor Job falhou:', err.message);
     }
   });
 
-  // ─── Segunda verificação de prazos às 18:00 ────────
+  // ─── Segunda verificação às 18:00 ──────────────────
   cron.schedule('0 18 * * *', async () => {
     try {
       await verificarPrazos();
+      await verificarParcelas();
     } catch (err) {
       logger.error('Prazo Monitor Job (tarde) falhou:', err.message);
     }

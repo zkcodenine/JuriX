@@ -358,7 +358,7 @@ function Field({ label, children }) {
 export default function PerfilModal({ onClose }) {
   const { usuario, atualizarUsuario } = useAuthStore();
   const [tab, setTab] = useState('dados'); // dados | seguranca
-  const [dados, setDados] = useState({ nome: usuario?.nome || '', oab: usuario?.oab || '', telefone: usuario?.telefone || '' });
+  const [dados, setDados] = useState({ nome: usuario?.nome || '', oab: usuario?.oab || '', telefone: usuario?.telefone || '', email: usuario?.email || '' });
   const [senhas, setSenhas] = useState({ senhaAtual: '', novaSenha: '', confirmar: '' });
   const [showSenhas, setShowSenhas] = useState({ atual: false, nova: false, conf: false });
   const avatarUrl = (() => {
@@ -517,11 +517,11 @@ export default function PerfilModal({ onClose }) {
               <Field label="E-mail">
                 <input
                   className="input-base"
-                  value={usuario?.email || ''}
-                  disabled
-                  style={{ opacity: .45, cursor: 'not-allowed' }}
+                  type="email"
+                  value={dados.email}
+                  onChange={e => setDados(d => ({ ...d, email: e.target.value }))}
+                  placeholder="voce@email.com"
                 />
-                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>E-mail não pode ser alterado.</p>
               </Field>
               <button onClick={() => salvarDados()} disabled={salvando} className="btn btn-gold w-full mt-2">
                 {salvando ? <span className="spinner" style={{ width: 16, height: 16 }} /> : <i className="fas fa-check" />}

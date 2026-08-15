@@ -63,11 +63,10 @@ export default function Notificacoes() {
             return (
               <div
                 key={n.id}
-                className={`flex gap-4 rounded-xl p-4 cursor-pointer transition-all hover:border-opacity-80 animate-fadeIn ${!n.lida ? 'border-l-2' : ''}`}
+                className="flex gap-4 rounded-xl p-4 cursor-pointer transition-all duration-300 hover:-translate-y-0.5 animate-fadeIn"
                 style={{
                   background: n.lida ? 'rgba(255,255,255,.03)' : 'rgba(201,168,76,.04)',
                   border: `1px solid ${n.lida ? 'var(--border)' : 'rgba(201,168,76,.2)'}`,
-                  borderLeftColor: n.lida ? undefined : color,
                   animationDelay: `${i * 25}ms`,
                 }}
                 onClick={() => {

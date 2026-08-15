@@ -36,6 +36,22 @@ async function listarNotificacoes(usuarioId, { pagina = 1, limite = 30, apenasNa
   return { notificacoes, total, naoLidas };
 }
 
+// ─── Não lidas criadas depois de um instante ───────
+// Alimenta o alerta de desktop: o app pergunta "o que chegou desde X?" e só
+// dispara som/toast para o que é realmente novo.
+async function listarNaoLidasDesde(usuarioId, desde) {
+  return prisma.notificacao.findMany({
+    where: {
+      usuarioId,
+      lida: false,
+      ...(desde ? { criadoEm: { gt: new Date(desde) } } : {}),
+    },
+    orderBy: { criadoEm: 'asc' },
+    take: 20,
+    include: { processo: { select: { numero: true, numeroCnj: true } } },
+  });
+}
+
 // ─── Marcar como lida ──────────────────────────────
 async function marcarComoLida(id, usuarioId) {
   return prisma.notificacao.updateMany({
@@ -60,4 +76,4 @@ async function marcarTodasComoLidas(usuarioId) {
   });
 }
 
-module.exports = { criarNotificacao, listarNotificacoes, marcarComoLida, marcarComoLidaPorProcesso, marcarTodasComoLidas };
+module.exports = { criarNotificacao, listarNotificacoes, listarNaoLidasDesde, marcarComoLida, marcarComoLidaPorProcesso, marcarTodasComoLidas };

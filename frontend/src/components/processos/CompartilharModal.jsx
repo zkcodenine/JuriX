@@ -10,14 +10,30 @@ const NIVEIS = [
   { valor: 'EDICAO',  label: 'Edição',   desc: 'Também edita dados, prazos e anotações' },
 ];
 
+// Resolve o caminho do avatar contra a origem correta (dev :3000 → backend :3001).
+function urlAvatar(path) {
+  if (!path) return null;
+  if (/^https?:/i.test(path)) return path;
+  const origin = window.location.port === '3000'
+    ? window.location.origin.replace(':3000', ':3001')
+    : window.location.origin;
+  return `${origin}${path.startsWith('/') ? '' : '/'}${path}`;
+}
+
 function Avatar({ usuario, tam = 32 }) {
-  return usuario.avatar ? (
-    <img src={usuario.avatar} alt="" className="rounded-full object-cover" style={{ width: tam, height: tam }} />
-  ) : (
-    <div className="rounded-full flex items-center justify-center text-[11px] font-bold"
+  const [erro, setErro] = useState(false);
+  const src = urlAvatar(usuario.avatar);
+  const iniciais = (
+    <div className="rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0"
       style={{ width: tam, height: tam, background: 'rgba(250,204,21,.15)', color: 'var(--accent)' }}>
       {getIniciais(usuario.nome)}
     </div>
+  );
+  if (!src || erro) return iniciais;
+  return (
+    <img src={src} alt="" onError={() => setErro(true)}
+      className="rounded-full object-cover flex-shrink-0"
+      style={{ width: tam, height: tam }} />
   );
 }
 
@@ -62,9 +78,9 @@ export default function CompartilharModal({ processoId, onClose }) {
   const souDono = acesso?.souDono;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9998] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,.6)' }} onClick={onClose}>
-      <div className="w-full max-w-md rounded-2xl p-6 max-h-[85vh] overflow-y-auto"
-        style={{ background: 'var(--bg-card, #0f1b3d)', border: '1px solid var(--border)' }}
+    <div className="fixed inset-0 z-[9998] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,.88)', backdropFilter: 'blur(8px)' }} onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl p-6 max-h-[85vh] overflow-y-auto animate-scaleIn"
+        style={{ background: 'var(--glass-bg, rgba(10,17,40,.96))', backdropFilter: 'blur(24px) saturate(1.3)', WebkitBackdropFilter: 'blur(24px) saturate(1.3)', border: '1px solid rgba(255,255,255,.1)' }}
         onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-bold mb-1" style={{ color: 'var(--text-primary)' }}>Compartilhar processo</h2>
         <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>

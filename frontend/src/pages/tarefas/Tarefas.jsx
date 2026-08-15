@@ -50,25 +50,24 @@ function ConfirmDeleteModal({ title, message, onConfirm, onCancel, loading }) {
 function TarefaCard({ tarefa, onToggle, onDelete, onEdit, onToggleSub }) {
   const navigate = useNavigate();
   const subs = tarefa.subtarefas || [];
-  const [expanded, setExpanded] = useState(subs.length > 0);
   const concluidas = subs.filter(s => s.status === 'CONCLUIDA').length;
   const isDone = tarefa.status === 'CONCLUIDA';
   const isOverdue = tarefa.prazo && !isDone && new Date(tarefa.prazo) < new Date();
 
   return (
     <div
-      className="rounded-xl overflow-hidden transition-all animate-fadeIn"
+      className="rounded-xl overflow-hidden transition-all duration-300 animate-fadeIn hover:-translate-y-0.5"
       style={{
         background: 'rgba(255,255,255,.03)', backdropFilter: 'blur(12px)',
         border: '1px solid var(--border)',
-        borderLeft: `3px solid ${priorCor[tarefa.prioridade]}`,
         opacity: isDone ? 0.5 : 1,
       }}
     >
-      {/* Clickable banner */}
+      {/* Banner — clicar edita a tarefa */}
       <div
         className="flex items-start gap-2.5 px-3 py-3 cursor-pointer transition-colors hover:bg-white/[.02]"
-        onClick={() => setExpanded(ex => !ex)}
+        onClick={() => onEdit(tarefa)}
+        title="Clique para editar"
       >
         {/* Check circle — stops propagation to avoid toggling actions */}
         <button
@@ -170,14 +169,6 @@ function TarefaCard({ tarefa, onToggle, onDelete, onEdit, onToggleSub }) {
             </span>
           )}
           <button
-            onClick={(e) => { e.stopPropagation(); onEdit(tarefa); }}
-            className="flex items-center justify-center rounded-lg transition-all hover:bg-white/5"
-            style={{ width: 30, height: 30, color: 'var(--text-secondary)' }}
-            title="Editar tarefa"
-          >
-            <i className="fas fa-pen text-[11px]" />
-          </button>
-          <button
             onClick={(e) => { e.stopPropagation(); onDelete(tarefa); }}
             className="flex items-center justify-center rounded-lg transition-all hover:bg-red-500/10"
             style={{ width: 30, height: 30, color: 'var(--text-muted)' }}
@@ -203,8 +194,8 @@ function TarefaCard({ tarefa, onToggle, onDelete, onEdit, onToggleSub }) {
         </div>
       )}
 
-      {/* Expanded subtasks */}
-      {expanded && subs.length > 0 && (
+      {/* Subtarefas — sempre visíveis quando existem */}
+      {subs.length > 0 && (
         <div className="px-4 pb-3 space-y-1" style={{ borderTop: '1px solid var(--border)' }}>
           <p className="text-[10px] font-bold uppercase tracking-widest pt-3 mb-2" style={{ color: 'var(--text-muted)' }}>
             Subtarefas
@@ -250,6 +241,8 @@ function NovaTarefaModal({ onClose, editTarefa }) {
     prazo: editTarefa?.prazo ? editTarefa.prazo.slice(0, 10) : '',
     prioridade: editTarefa?.prioridade || 'MEDIA',
     processoId: editTarefa?.processoId || null,
+    horario: editTarefa?.horario || '',
+    googleSync: editTarefa?.googleSync ?? true,
   });
   // For edit mode, keep track of existing subtask IDs so we can diff
   const [subs, setSubs] = useState(
@@ -272,8 +265,19 @@ function NovaTarefaModal({ onClose, editTarefa }) {
 
   const removeSub = (i) => setSubs(s => s.filter((_, idx) => idx !== i));
 
+  // Arrastar para reordenar subtarefas.
+  const [dragIdx, setDragIdx] = useState(null);
+  const moverSub = (from, to) => setSubs(s => {
+    const arr = [...s];
+    const [item] = arr.splice(from, 1);
+    arr.splice(to, 0, item);
+    return arr;
+  });
+
   const { mutate, isPending } = useMutation({
     mutationFn: async () => {
+      // Descarrega o texto pendente no campo (usuário digitou mas não clicou "+").
+      const subsFinais = novoSub.trim() ? [...subs, { titulo: novoSub.trim() }] : subs;
       if (isEdit) {
         // 1. Update main task fields
         await api.put(`/tarefas/${editTarefa.id}`, {
@@ -282,12 +286,14 @@ function NovaTarefaModal({ onClose, editTarefa }) {
           prazo: form.prazo || null,
           prioridade: form.prioridade,
           processoId: form.processoId || null,
+          horario: form.horario || null,
+          googleSync: form.googleSync,
         });
 
         // 2. Handle subtask diffs
         const originalSubs = editTarefa.subtarefas || [];
         const originalIds = originalSubs.map(s => s.id);
-        const currentIds = subs.filter(s => s.id).map(s => s.id);
+        const currentIds = subsFinais.filter(s => s.id).map(s => s.id);
 
         // Delete removed subtasks
         const removedIds = originalIds.filter(id => !currentIds.includes(id));
@@ -296,7 +302,7 @@ function NovaTarefaModal({ onClose, editTarefa }) {
         }
 
         // Add new subtasks (those without id)
-        const newSubs = subs.filter(s => !s.id);
+        const newSubs = subsFinais.filter(s => !s.id);
         for (const sub of newSubs) {
           await api.post(`/tarefas/${editTarefa.id}/subtarefas`, { titulo: sub.titulo });
         }
@@ -306,7 +312,7 @@ function NovaTarefaModal({ onClose, editTarefa }) {
           prazo: form.prazo || null,
           processoId: form.processoId || null,
           status: 'PENDENTE',
-          subtarefas: subs.length ? subs : undefined,
+          subtarefas: subsFinais.length ? subsFinais : undefined,
         });
       }
     },
@@ -417,8 +423,8 @@ function NovaTarefaModal({ onClose, editTarefa }) {
             />
           </div>
 
-          {/* Prazo + Prioridade */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Prazo + Horário + Prioridade */}
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label style={labelStyle}>Prazo</label>
               <input
@@ -427,6 +433,16 @@ function NovaTarefaModal({ onClose, editTarefa }) {
                 style={{ fontSize: '0.875rem' }}
                 value={form.prazo}
                 onChange={e => setForm(f => ({ ...f, prazo: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>Horário</label>
+              <input
+                type="time"
+                className="input-base"
+                style={{ fontSize: '0.875rem' }}
+                value={form.horario}
+                onChange={e => setForm(f => ({ ...f, horario: e.target.value }))}
               />
             </div>
             <div>
@@ -441,6 +457,18 @@ function NovaTarefaModal({ onClose, editTarefa }) {
               </select>
             </div>
           </div>
+
+          {/* Google Agenda — só faz sentido com prazo definido */}
+          {form.prazo && (
+            <label className="flex items-center gap-2.5 cursor-pointer rounded-xl p-3" style={{ background: 'rgba(255,255,255,.03)', border: '1px solid var(--border)' }}>
+              <input type="checkbox" checked={form.googleSync}
+                onChange={e => setForm(f => ({ ...f, googleSync: e.target.checked }))}
+                style={{ accentColor: 'var(--accent)', width: 16, height: 16 }} />
+              <span className="text-sm flex items-center gap-1.5" style={{ color: 'var(--text-secondary)' }}>
+                <i className="fab fa-google text-xs" style={{ color: '#4285F4' }} /> Adicionar o prazo à Google Agenda
+              </span>
+            </label>
+          )}
 
           {/* Processo vinculado */}
           <div>
@@ -497,10 +525,15 @@ function NovaTarefaModal({ onClose, editTarefa }) {
                 {subs.map((s, i) => (
                   <div
                     key={i}
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg"
-                    style={{ background: 'rgba(255,255,255,.04)', border: '1px solid var(--border)' }}
+                    draggable
+                    onDragStart={() => setDragIdx(i)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => { if (dragIdx !== null && dragIdx !== i) moverSub(dragIdx, i); setDragIdx(null); }}
+                    onDragEnd={() => setDragIdx(null)}
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg transition-all"
+                    style={{ background: 'rgba(255,255,255,.04)', border: '1px solid var(--border)', opacity: dragIdx === i ? 0.4 : 1, cursor: 'grab' }}
                   >
-                    <i className="fas fa-grip-vertical text-[10px]" style={{ color: 'var(--text-muted)', opacity: .4 }} />
+                    <i className="fas fa-grip-vertical text-[10px]" style={{ color: 'var(--text-muted)', opacity: .4 }} title="Arraste para reordenar" />
                     <span className="flex-1 text-sm">{s.titulo}</span>
                     <button onClick={() => removeSub(i)} className="text-xs" style={{ color: 'var(--danger)' }}>
                       <i className="fas fa-xmark" />
@@ -684,6 +717,8 @@ export default function Tarefas() {
 
   // Filter by search
   const tarefasFiltradas = tarefas.filter(t => {
+    // Padrão (sem filtro de status escolhido): não mostra concluídas.
+    if (!filtroStatus && t.status === 'CONCLUIDA') return false;
     if (!busca.trim()) return true;
     const q = busca.toLowerCase();
     return t.titulo.toLowerCase().includes(q) || t.descricao?.toLowerCase().includes(q);
@@ -698,7 +733,6 @@ export default function Tarefas() {
   const statusFilters = [
     { value: '', label: 'Todas', count: tarefas.length, icon: 'fa-list' },
     { value: 'PENDENTE', label: 'Pendentes', count: totalPendentes, icon: 'fa-circle', color: '#C9A84C' },
-    { value: 'EM_ANDAMENTO', label: 'Em andamento', count: totalAndamento, icon: 'fa-spinner', color: '#60a5fa' },
     { value: 'CONCLUIDA', label: 'Concluídas', count: totalConcluidas, icon: 'fa-circle-check', color: '#10b981' },
   ];
 

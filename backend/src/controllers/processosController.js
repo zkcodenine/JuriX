@@ -2,6 +2,7 @@ const { prisma } = require('../config/database');
 const { cacheGet, cacheSet, cacheDel, cacheDelPattern } = require('../config/redis');
 const datajudService = require('../services/datajudService');
 const notificationService = require('../services/notificationService');
+const gcal = require('../services/googleCalendarService');
 const {
   whereProcessoVisivel, whereProcessoEditavel, podeVer, podeEditar, ehDono,
 } = require('../utils/acessoProcesso');
@@ -141,6 +142,7 @@ async function atualizar(req, res, next) {
     const camposPermitidos = [
       'numero', 'tribunal', 'vara', 'classe', 'assunto', 'status',
       'valor', 'observacoes', 'dataDistribuicao', 'monitoramentoAtivo',
+      'cobrancaNome', 'cobrancaEndereco', 'cobrancaWhatsapp', 'cobrancaContatos',
     ];
     const dados = {};
     // Campos obrigatórios (não-anuláveis no DB) — ignorar se vieram vazios
@@ -662,10 +664,22 @@ async function adicionarPrazo(req, res, next) {
       tipo:            b.tipo      || 'PROCESSUAL',
       status:          b.status    || 'PENDENTE',
       alertaDias:      b.alertaDias != null ? Number(b.alertaDias) : 3,
+      horario:         b.horario   || null,
+      googleSync:      b.googleSync !== false, // padrão ON
     };
     const prazo = await prisma.prazo.create({
       data: { ...dados, processoId: req.params.id },
     });
+
+    // Espelha na Google Agenda de quem cadastrou (best-effort), se ativado.
+    if (prazo.googleSync) {
+      const googleEventId = await gcal.sincronizarPrazoProcesso(req.usuario.id, prazo);
+      if (googleEventId) {
+        await prisma.prazo.update({ where: { id: prazo.id }, data: { googleEventId } });
+        prazo.googleEventId = googleEventId;
+      }
+    }
+
     res.status(201).json(prazo);
   } catch (err) { next(err); }
 }
@@ -677,10 +691,29 @@ async function atualizarPrazo(req, res, next) {
     });
     if (!existe) return res.status(404).json({ error: 'Prazo não encontrado.' });
 
+    // Não deixa o cliente sobrescrever campos internos.
+    const { googleEventId: _g, processoId: _p, id: _i, criadoEm: _c, ...dados } = req.body;
+    if (dados.dataVencimento) dados.dataVencimento = new Date(dados.dataVencimento);
+
     const prazo = await prisma.prazo.update({
       where: { id: req.params.prazoId },
-      data: req.body,
+      data: dados,
     });
+
+    // Reflete no Google conforme o opt-in: se ligado, cria/atualiza; se desligado
+    // e havia evento, remove.
+    if (prazo.googleSync) {
+      const googleEventId = await gcal.sincronizarPrazoProcesso(req.usuario.id, { ...prazo, googleEventId: existe.googleEventId });
+      if (googleEventId && googleEventId !== existe.googleEventId) {
+        await prisma.prazo.update({ where: { id: prazo.id }, data: { googleEventId } });
+        prazo.googleEventId = googleEventId;
+      }
+    } else if (existe.googleEventId) {
+      await gcal.deletarEventoGoogle(req.usuario.id, existe.googleEventId);
+      await prisma.prazo.update({ where: { id: prazo.id }, data: { googleEventId: null } });
+      prazo.googleEventId = null;
+    }
+
     res.json(prazo);
   } catch (err) { next(err); }
 }
@@ -691,6 +724,11 @@ async function deletarPrazo(req, res, next) {
       where: { id: req.params.prazoId, processo: { id: req.params.id, ...whereProcessoEditavel(req.usuario.id) } },
     });
     if (!existe) return res.status(404).json({ error: 'Prazo não encontrado.' });
+
+    // Remove o evento espelhado da Google Agenda.
+    if (existe.googleEventId) {
+      await gcal.deletarEventoGoogle(req.usuario.id, existe.googleEventId);
+    }
 
     await prisma.prazo.delete({ where: { id: req.params.prazoId } });
     res.json({ mensagem: 'Prazo removido.' });
@@ -760,10 +798,18 @@ async function _salvarMovimentacoes(processoId, movimentacoes, numeroCnj) {
     if (seen.has(hash)) hash = `${hash}_${idx}`;
     seen.add(hash);
     try {
-      await prisma.movimentacao.upsert({
+      // Só conta como NOVA se realmente não existir. O upsert antigo contava
+      // toda movimentação (mesmo as já salvas) como nova → "55 novas" a cada
+      // sync, uma falsa novidade. Aqui verificamos antes e só criamos o que
+      // falta, contando apenas inserções reais.
+      const existente = await prisma.movimentacao.findFirst({
         where: { hashExterno: hash },
-        update: {},
-        create: {
+        select: { id: true },
+      });
+      if (existente) continue;
+
+      await prisma.movimentacao.create({
+        data: {
           processoId,
           data: new Date(m.data),
           descricao: String(m.descricao || 'Movimentação').slice(0, 500),
@@ -876,6 +922,30 @@ async function movimentacoesAgenda(req, res, next) {
 }
 
 // ─── Prazos de todos os processos (para Agenda) ────
+// Parcelas de honorário em aberto, para exibir na Agenda (nome do cliente + valor).
+async function parcelasAgenda(req, res, next) {
+  try {
+    const parcelas = await prisma.parcela.findMany({
+      where: {
+        status: { in: ['PENDENTE', 'ATRASADO'] },
+        honorario: { processo: whereProcessoVisivel(req.usuario.id) },
+      },
+      include: {
+        honorario: { select: { processo: { select: { id: true, numero: true, numeroCnj: true, cobrancaNome: true } } } },
+      },
+      orderBy: { vencimento: 'asc' },
+    });
+    res.json(parcelas.map((p) => ({
+      id: p.id,
+      vencimento: p.vencimento,
+      valor: p.valor,
+      status: p.status,
+      processoId: p.honorario.processo.id,
+      cliente: p.honorario.processo.cobrancaNome || p.honorario.processo.numero || 'Cliente',
+    })));
+  } catch (err) { next(err); }
+}
+
 async function prazosAgenda(req, res, next) {
   try {
     const prazos = await prisma.prazo.findMany({
@@ -987,7 +1057,7 @@ async function sincronizarTodos(req, res, next) {
 }
 
 module.exports = {
-  listar, criar, obter, atualizar, deletar, buscar, prazosAgenda, movimentacoesAgenda,
+  listar, criar, obter, atualizar, deletar, buscar, prazosAgenda, parcelasAgenda, movimentacoesAgenda,
   importarCNJ, vincularCNJ, confirmarVinculacaoCNJ,
   ativarMonitoramento, desativarMonitoramento,
   sincronizarMovimentacoes, sincronizarTodos,

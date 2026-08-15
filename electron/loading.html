@@ -7,110 +7,153 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
+    html, body { height: 100%; }
+
     body {
-      background: #0a0a0a;
+      /* Fundo com leve brilho dourado central, para dar profundidade. */
+      background:
+        radial-gradient(120% 90% at 50% 38%, rgba(201,168,76,.10), transparent 60%),
+        #08080a;
       color: #fff;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: 'Segoe UI Variable Display', 'Segoe UI', system-ui, -apple-system, sans-serif;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
+      text-align: center;
       height: 100vh;
+      padding: 32px 44px;
       user-select: none;
       overflow: hidden;
+      -webkit-font-smoothing: antialiased;
     }
 
-    .logo {
-      width: 120px;
-      height: 120px;
-      margin-bottom: 24px;
-      object-fit: contain;
-      filter: drop-shadow(0 4px 24px rgba(201,168,76,.25));
-    }
-
-    .title {
-      font-size: 28px;
-      font-weight: 700;
-      letter-spacing: 6px;
-      color: #c9a84c;
-      margin-bottom: 6px;
-    }
-
-    .subtitle {
-      font-size: 11px;
-      color: #555;
-      letter-spacing: 3px;
-      text-transform: uppercase;
-      margin-bottom: 40px;
-    }
-
-    /* Spinner */
-    .spinner-wrap {
+    .stage {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 14px;
+      justify-content: center;
+      gap: 0;
+    }
+
+    .logo {
+      width: 132px;
+      height: 132px;
+      object-fit: contain;
+      /* Sem moldura — só o brilho suave do logo. */
+      filter: drop-shadow(0 6px 30px rgba(201,168,76,.35));
+      animation: floaty 3.6s ease-in-out infinite;
+    }
+
+    @keyframes floaty {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-6px); }
+    }
+
+    .title {
+      margin-top: 22px;
+      font-size: 30px;
+      font-weight: 700;
+      letter-spacing: 8px;
+      color: #c9a84c;
+    }
+
+    .subtitle {
+      margin-top: 4px;
+      font-size: 10.5px;
+      color: #6b6b73;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+    }
+
+    .spinner-wrap {
+      margin-top: 44px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
     }
 
     .spinner {
-      width: 32px;
-      height: 32px;
-      border: 2px solid #222;
+      width: 30px;
+      height: 30px;
+      border: 2.5px solid rgba(201,168,76,.15);
       border-top-color: #c9a84c;
       border-radius: 50%;
-      animation: spin 0.9s linear infinite;
+      animation: spin 0.85s linear infinite;
     }
 
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* Mensagem de status — fonte moderna, maior e bem mais visível. */
     .status {
-      font-size: 12px;
-      color: #555;
-      letter-spacing: 1px;
-      min-height: 18px;
-      transition: color 0.3s;
+      font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px;
+      font-weight: 500;
+      color: #e7e2d4;
+      letter-spacing: .3px;
+      min-height: 22px;
+      opacity: 1;
+      transition: opacity .35s ease;
     }
-
+    .status.fade { opacity: 0; }
+    .status { max-width: 520px; }
+    .status .dots { color: #c9a84c; }
   </style>
 </head>
 <body>
-  <!-- Logo oficial JuriX -->
-  <img class="logo" src="assets/icon.png" alt="JuriX" />
+  <div class="stage">
+    <img class="logo" src="assets/icon.png" alt="JuriX" />
+    <div class="title">JURIX</div>
+    <div class="subtitle">Sistema Jurídico</div>
 
-  <div class="title">JURIX</div>
-  <div class="subtitle">Sistema Jurídico</div>
-
-  <div class="spinner-wrap" id="spinnerWrap">
-    <div class="spinner"></div>
-    <div class="status" id="statusText">Iniciando...</div>
+    <div class="spinner-wrap">
+      <div class="spinner"></div>
+      <div class="status" id="statusText">Preparando a papelada<span class="dots">…</span></div>
+    </div>
   </div>
 
   <script>
     const statusEl = document.getElementById('statusText')
 
-    const messages = [
-      'Iniciando...',
-      'Conectando ao banco de dados...',
-      'Carregando módulos...',
-      'Quase pronto...',
+    // Mistura de status reais (o que o app está mesmo fazendo) com "brincadeiras"
+    // que qualquer advogado entende — para a espera ser leve.
+    const mensagens = [
+      'Preparando a papelada',
+      'Conectando ao banco de dados',
+      'Esquentando o café',
+      'Sincronizando com os tribunais (STJ, TJ…)',
+      'Organizando os autos',
+      'Carregando seus processos',
+      'Consultando a jurisprudência',
+      'Verificando prazos e intimações',
+      'Afiando os argumentos',
+      'Separando as petições',
+      'Conferindo as movimentações',
+      'Batendo o martelo',
     ]
-    let msgIdx = 0
+
+    let idx = 0
     const inicio = Date.now()
 
+    function mostrar(texto) {
+      statusEl.classList.add('fade')
+      setTimeout(() => {
+        statusEl.innerHTML = texto + '<span class="dots">…</span>'
+        statusEl.classList.remove('fade')
+      }, 350)
+    }
+
     setInterval(() => {
-      // A primeira abertura depois de um update é lenta: o antivírus varre os
-      // arquivos recém-gravados e o backend leva ~40s em vez de ~6s. Ficar
-      // repetindo "Quase pronto..." nesse intervalo parece travamento — melhor
-      // dizer o que está acontecendo.
-      if (Date.now() - inicio > 20000) {
-        statusEl.textContent = 'Primeira abertura após a atualização — pode levar até 1 minuto...'
+      // Primeira abertura após um update é lenta (o antivírus varre os arquivos
+      // novos e o backend leva ~40s em vez de ~6s). Avisa em vez de parecer travado.
+      if (Date.now() - inicio > 22000) {
+        mostrar('Primeira abertura após a atualização — pode levar até 1 minuto')
         return
       }
-      msgIdx = (msgIdx + 1) % messages.length
-      statusEl.textContent = messages[msgIdx]
-    }, 1800)
+      idx = (idx + 1) % mensagens.length
+      mostrar(mensagens[idx])
+    }, 2100)
   </script>
 </body>
 </html>

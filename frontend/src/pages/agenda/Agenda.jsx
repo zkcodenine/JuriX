@@ -684,6 +684,11 @@ export default function Agenda() {
     queryFn: () => api.get('/processos/movimentacoes-agenda').then(r => r.data),
   });
 
+  const { data: parcelas = [] } = useQuery({
+    queryKey: ['agenda-parcelas'],
+    queryFn: () => api.get('/processos/parcelas-agenda').then(r => r.data),
+  });
+
   const deletarEventoMut = useMutation({
     mutationFn: (id) => api.delete(`/agenda/eventos/${id}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['agenda-eventos'], refetchType: 'all' }); toast.success('Evento removido.'); },
@@ -767,6 +772,16 @@ export default function Agenda() {
     return map;
   }, [movimentacoes]);
 
+  const parcelasPorData = useMemo(() => {
+    const map = {};
+    parcelas.forEach(pc => {
+      const key = toDateOnly(pc.vencimento);
+      if (!map[key]) map[key] = [];
+      map[key].push({ ...pc, _type: 'parcela' });
+    });
+    return map;
+  }, [parcelas]);
+
   // Calendar
   const inicioMes = startOfMonth(mesAtual);
   const fimMes = endOfMonth(mesAtual);
@@ -786,6 +801,7 @@ export default function Agenda() {
   const eventosDia = diaSel ? (eventosPorData[diaSel] || []) : [];
   const tarefasDia = diaSel ? (tarefasPorData[diaSel] || []) : [];
   const movsDia = diaSel ? (movsPorData[diaSel] || []) : [];
+  const parcelasDia = diaSel ? (parcelasPorData[diaSel] || []) : [];
 
   const corPrazo = (pz) => {
     const d = Math.ceil((new Date(pz.dataVencimento) - hoje) / 86400000);
@@ -799,7 +815,8 @@ export default function Agenda() {
     const p = prazosPorData[dateKey] || [];
     const t = tarefasPorData[dateKey] || [];
     const m = movsPorData[dateKey] || [];
-    return [...e, ...p, ...t, ...m];
+    const pc = parcelasPorData[dateKey] || [];
+    return [...e, ...p, ...t, ...m, ...pc];
   };
 
   const handleDayClick = (dia, temOverflow) => {
@@ -911,6 +928,9 @@ export default function Agenda() {
                     } else if (item._type === 'movimentacao') {
                       cor = '#22d3ee';
                       titulo = item.descricao?.slice(0, 40) || 'Atualização';
+                    } else if (item._type === 'parcela') {
+                      cor = '#10b981';
+                      titulo = `${item.cliente} — ${Number(item.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`;
                     } else {
                       cor = corPrazo(item);
                       titulo = item.titulo;
@@ -936,6 +956,8 @@ export default function Agenda() {
                             navigate(`/processos/${item._processo.id}?tab=prazos`);
                           } else if (item._type === 'movimentacao' && item._processo) {
                             navigate(`/processos/${item._processo.id}?tab=movimentacoes`);
+                          } else if (item._type === 'parcela' && item.processoId) {
+                            navigate(`/processos/${item.processoId}?tab=honorarios`);
                           }
                         }}
                       >
@@ -993,7 +1015,7 @@ export default function Agenda() {
                 </h3>
                 {diaSelecionado && (
                   <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                    {eventosDia.length + prazosDia.length + tarefasDia.length + movsDia.length} item{(eventosDia.length + prazosDia.length + tarefasDia.length + movsDia.length) !== 1 ? 'ns' : ''}
+                    {eventosDia.length + prazosDia.length + tarefasDia.length + movsDia.length + parcelasDia.length} item{(eventosDia.length + prazosDia.length + tarefasDia.length + movsDia.length + parcelasDia.length) !== 1 ? 'ns' : ''}
                   </p>
                 )}
               </div>
@@ -1027,7 +1049,7 @@ export default function Agenda() {
                 </div>
                 <p className="text-xs">Clique em um dia no calendário</p>
               </div>
-            ) : (eventosDia.length + prazosDia.length + tarefasDia.length + movsDia.length) === 0 ? (
+            ) : (eventosDia.length + prazosDia.length + tarefasDia.length + movsDia.length + parcelasDia.length) === 0 ? (
               <div className="flex flex-col items-center pt-12 gap-3" style={{ color: 'var(--text-muted)' }}>
                 <div className="flex items-center justify-center rounded-2xl" style={{ width: 56, height: 56, background: 'rgba(255,255,255,.03)', border: '1px solid var(--border)' }}>
                   <i className="fas fa-calendar-check text-xl" style={{ opacity: .3 }} />
@@ -1139,6 +1161,37 @@ export default function Agenda() {
                           </div>
                         );
                       })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Parcelas de honorário */}
+                {parcelasDia.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider mb-2 px-1 mt-1 flex items-center gap-1.5" style={{ color: '#10b981' }}>
+                      <i className="fas fa-sack-dollar" />Honorários <span style={{ color: 'var(--text-muted)' }}>({parcelasDia.length})</span>
+                    </p>
+                    <div className="space-y-1.5">
+                      {parcelasDia.map((pc, idx) => (
+                        <div
+                          key={`parcela-${pc.id}-${idx}`}
+                          className="flex items-start gap-2.5 p-3 rounded-xl cursor-pointer animate-fadeInFast transition-all"
+                          style={{ background: 'rgba(255,255,255,.03)', border: '1px solid var(--border)' }}
+                          onClick={() => pc.processoId && navigate(`/processos/${pc.processoId}?tab=honorarios`)}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(16,185,129,.3)'; e.currentTarget.style.background = 'rgba(16,185,129,.04)'; }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'rgba(255,255,255,.03)'; }}
+                        >
+                          <div className="flex-shrink-0 mt-0.5 rounded-md" style={{ width: 4, height: 32, background: '#10b981' }} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold truncate" style={{ color: '#10b981' }}>
+                              {Number(pc.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </p>
+                            <p className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--text-secondary)' }}>
+                              <i className="fas fa-user mr-0.5" />{pc.cliente}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

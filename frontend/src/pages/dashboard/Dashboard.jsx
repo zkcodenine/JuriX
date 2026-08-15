@@ -97,12 +97,10 @@ function DashCard({ children, className = '', colSpan = 'full', hero = false, de
       onClick={onClick}
       className={`dash-card ${colClass} ${className}`}
       style={{
-        background: 'rgba(255,255,255,.03)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        border: '1px solid var(--border)',
-        borderRadius: 18,
-        padding: '28px 28px 26px',
+        background: 'transparent',
+        border: 'none',
+        borderRadius: 0,
+        padding: '24px 26px',
         position: 'relative',
         overflow: 'hidden',
         transition: 'border-color .25s, box-shadow .25s, transform .2s',
@@ -153,7 +151,7 @@ function CardLabel({ icon, children, live, color }) {
 }
 
 /* ── Stat pill ────────────────────────────────────────────────────── */
-function StatPill({ value, label, borderColor = 'var(--accent)', valueColor, sub, tint }) {
+function StatPill({ value, label, borderColor = 'var(--accent)', valueColor, sub, tint, onClick }) {
   // tint: cor base do banner (glass tintado). Fallback p/ borderColor.
   const base = tint || borderColor;
   // Quando cor é CSS var, usa como está; senão aplica glass tint na própria cor
@@ -166,7 +164,7 @@ function StatPill({ value, label, borderColor = 'var(--accent)', valueColor, sub
         background: `linear-gradient(135deg, ${base}28, ${base}10)`,
       };
   return (
-    <div className="dash-stat-pill group" style={{
+    <div className="dash-stat-pill group" onClick={onClick ? (e) => { e.stopPropagation(); onClick(); } : undefined} style={{
       ...bgStyle,
       backdropFilter: 'blur(14px) saturate(1.3)',
       WebkitBackdropFilter: 'blur(14px) saturate(1.3)',
@@ -174,7 +172,7 @@ function StatPill({ value, label, borderColor = 'var(--accent)', valueColor, sub
       borderTop: `2px solid ${borderColor}`,
       borderRadius: 14, padding: '16px 14px', textAlign: 'center',
       position: 'relative', overflow: 'hidden',
-      cursor: 'default',
+      cursor: onClick ? 'pointer' : 'default',
       boxShadow: `0 4px 20px ${isVar ? 'rgba(184,137,61,.12)' : `${base}20`}, inset 0 1px 0 rgba(255,255,255,.18)`,
     }}>
       {/* brilho decorativo */}
@@ -207,6 +205,14 @@ export default function Dashboard() {
   const { usuario } = useAuthStore();
   const navigate = useNavigate();
   const { isOnline, isUsingCache, connectionQuality } = useConnectionStore();
+
+  // Modal de honorários por situação (recebido / pendente / atrasado).
+  const [honStatus, setHonStatus] = useState(null);
+  const { data: honPorStatus } = useQuery({
+    queryKey: ['honorarios-por-status'],
+    queryFn: () => api.get('/honorarios/por-status').then(r => r.data),
+    enabled: !!honStatus,
+  });
 
   // Adaptive: 60s good, 180s slow, disabled offline
   const dashInterval = !isOnline ? false : connectionQuality === 'slow' ? 180000 : 60000;
@@ -303,8 +309,15 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* ── Grid ────────────────────────────────────────────────── */}
-      <div className="dash-grid-container">
+      {/* ── Grid — tudo em um único card ────────────────────────── */}
+      <div className="dash-grid-container" style={{
+        background: 'rgba(255,255,255,.03)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        border: '1px solid var(--border)',
+        borderRadius: 18,
+        overflow: 'hidden',
+      }}>
 
         {/* ═══ ROW 1: Visão Geral (full) ═══════════════════════════ */}
         <DashCard colSpan="full" delay={0}>
@@ -319,7 +332,7 @@ export default function Dashboard() {
         </DashCard>
 
         {/* ═══ ROW 2: Audiências do Dia (full) ═════════════════════ */}
-        <DashCard colSpan="full" delay={70}>
+        <DashCard colSpan="full" delay={70} style={{ borderTop: '1px solid var(--border)' }}>
           <CardLabel icon="fa-gavel">Compromissos do Dia</CardLabel>
           {audienciasHoje.length === 0 && prazosHoje.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '24px 16px', color: 'var(--text-muted)', fontSize: 12 }}>
@@ -385,7 +398,7 @@ export default function Dashboard() {
         </DashCard>
 
         {/* ═══ ROW 3: Controle de Honorários (full) ════════════════ */}
-        <DashCard colSpan="full" delay={140} onClick={() => navigate('/honorarios')}>
+        <DashCard colSpan="full" delay={140} style={{ borderTop: '1px solid var(--border)' }}>
           <CardLabel icon="fa-file-invoice-dollar">Controle de Honorarios</CardLabel>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" style={{ marginTop: 16, marginBottom: 20 }}>
             <StatPill
@@ -393,18 +406,21 @@ export default function Dashboard() {
               label="Recebido no Mes"
               borderColor="rgba(16,185,129,.3)"
               valueColor="var(--success)"
+              onClick={() => setHonStatus('recebido')}
             />
             <StatPill
               value={formatarMoeda(honorarios.pendente ?? 0)}
               label="Pendentes"
               borderColor="rgba(234,179,8,.3)"
               valueColor="var(--accent)"
+              onClick={() => setHonStatus('pendente')}
             />
             <StatPill
               value={formatarMoeda(honorarios.atrasado ?? 0)}
               label="Atrasados"
               borderColor="rgba(239,68,68,.3)"
               valueColor="var(--danger)"
+              onClick={() => setHonStatus('atrasado')}
             />
           </div>
           <div style={{
@@ -423,7 +439,7 @@ export default function Dashboard() {
         </DashCard>
 
         {/* ═══ ROW 4: Calendário Semanal (full) ════════════════════ */}
-        <DashCard colSpan="full" delay={210}>
+        <DashCard colSpan="full" delay={210} style={{ borderTop: '1px solid var(--border)' }}>
           <CardLabel icon="fa-calendar-week">Calendario Semanal</CardLabel>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6 }}>
             {weekDays.map(day => {
@@ -472,7 +488,7 @@ export default function Dashboard() {
                     display: 'flex', alignItems: 'center', gap: 8,
                     fontSize: 12, color: 'var(--text-secondary)',
                     padding: '7px 10px', background: isToday ? 'rgba(201,168,76,.12)' : 'rgba(255,255,255,.03)',
-                    borderRadius: 8, borderLeft: `${isToday ? 4 : 3}px solid ${isToday ? 'var(--accent)' : e.etiqueta?.cor || 'var(--accent)'}`,
+                    borderRadius: 8, border: `1px solid ${isToday ? 'rgba(201,168,76,.25)' : 'var(--border)'}`,
                     boxShadow: isToday ? '0 0 12px rgba(201,168,76,.15)' : 'none',
                     cursor: 'pointer',
                   }}>
@@ -487,286 +503,59 @@ export default function Dashboard() {
           </div>
         </DashCard>
 
-        {/* ═══ ROW 5: Processos Atualizados (col 2) + Próximos Prazos (col 1) ═══ */}
-        <DashCard colSpan="2" delay={280}>
-          <CardLabel icon="fa-balance-scale">
-            {processosAtualizados.length > 0 ? (
-              <>{`Processos Atualizados — ${processosAtualizados.length} nas ultimas 48h`}</>
-            ) : 'Radar Processual'}
-          </CardLabel>
-          {processosAtualizados.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '28px 16px' }}>
-              <i className="fas fa-check-double" style={{ fontSize: 32, color: 'var(--success)', marginBottom: 12, display: 'block' }} />
-              <div style={{ color: 'var(--success)', fontWeight: 700, fontSize: 14, marginBottom: 6 }}>Tudo em dia</div>
-              <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Nenhuma movimentacao recente nos<br />seus processos.</div>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {processosAtualizados.slice(0, 5).map((proc, i) => {
-                const ts = tribunalStyle(proc.tribunal);
-                return (
-                  <div key={proc.id} className="group" style={{
-                    background: 'rgba(255,255,255,.03)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderRadius: 11,
-                    padding: '12px 14px', border: `1px solid var(--border)`,
-                    borderLeft: `3px solid ${ts.accent}`,
-                    cursor: 'pointer', transition: 'border-color .2s, transform .15s',
-                    animation: `floatUp .4s ease ${i * .06}s both`,
-                  }} onClick={() => navigate(`/processos/${proc.id}`)}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>{proc.partes?.[0]?.nome || proc.numero || proc.numeroCnj}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {proc.tribunal && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                            style={{ background: ts.bg, color: ts.accent, border: `1px solid ${ts.border}` }}>
-                            {proc.tribunal}
-                          </span>
-                        )}
-                        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{formatarTempoRelativo(proc.dataUltimaAtualizacao)}</span>
-                      </div>
-                    </div>
-                    {proc.movimentacoes?.slice(0, 2).map(mov => (
-                      <div key={mov.id} style={{
-                        display: 'flex', alignItems: 'start', gap: 6, marginTop: 4,
-                        fontSize: 11, color: 'var(--text-secondary)',
-                      }}>
-                        <i className="fas fa-bolt text-[9px] mt-1" style={{ color: ts.accent, flexShrink: 0 }} />
-                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mov.descricao}</span>
-                        <OrigemBadge origem={mov.origemApi} />
+      </div>{/* /grid */}
+
+      {/* Modal: processos por situação de honorário */}
+      {honStatus && (() => {
+        const cfg = {
+          recebido: { titulo: 'Recebido no mês', cor: '#10b981' },
+          pendente: { titulo: 'Pendentes', cor: 'var(--accent)' },
+          atrasado: { titulo: 'Atrasados', cor: '#ef4444' },
+        }[honStatus];
+        const lista = honPorStatus?.[honStatus] || [];
+        return (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,.85)', backdropFilter: 'blur(8px)' }}
+            onClick={(e) => e.target === e.currentTarget && setHonStatus(null)}>
+            <div className="w-full max-w-lg rounded-2xl overflow-hidden animate-scaleIn"
+              style={{ background: 'var(--glass-bg, rgba(10,17,40,.97))', backdropFilter: 'blur(24px) saturate(1.3)', border: '1px solid rgba(255,255,255,.1)', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+              <div className="flex justify-between items-center px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+                <h3 className="text-lg font-bold flex items-center gap-2" style={{ color: cfg.cor }}>
+                  <i className="fas fa-sack-dollar text-sm" /> {cfg.titulo}
+                  <span className="text-xs font-normal" style={{ color: 'var(--text-muted)' }}>({lista.length})</span>
+                </h3>
+                <button onClick={() => setHonStatus(null)} className="flex items-center justify-center rounded-xl hover:opacity-70 transition-opacity" style={{ width: 34, height: 34, background: 'rgba(255,255,255,.03)' }}>
+                  <i className="fas fa-xmark" style={{ color: 'var(--text-secondary)' }} />
+                </button>
+              </div>
+              <div className="p-4 overflow-y-auto" style={{ flex: 1 }}>
+                {lista.length === 0 ? (
+                  <p className="text-sm text-center py-10" style={{ color: 'var(--text-muted)' }}>Nenhum processo nesta situação.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {lista.map((it) => (
+                      <div key={it.parcelaId}
+                        className="flex items-center justify-between gap-3 p-3 rounded-xl cursor-pointer transition-all hover:-translate-y-0.5"
+                        style={{ background: 'rgba(255,255,255,.03)', border: '1px solid var(--border)' }}
+                        onClick={() => { setHonStatus(null); navigate(`/processos/${it.processoId}?tab=honorarios`); }}>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{it.cliente}</p>
+                          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                            Vence {new Date(it.vencimento).toLocaleDateString('pt-BR')}
+                          </p>
+                        </div>
+                        <span className="text-sm font-bold flex-shrink-0" style={{ color: cfg.cor }}>
+                          {formatarMoeda(it.valor)}
+                        </span>
                       </div>
                     ))}
                   </div>
-                );
-              })}
+                )}
+              </div>
             </div>
-          )}
-        </DashCard>
-
-        <DashCard colSpan="1" delay={350}>
-          <CardLabel icon="fa-clock">Proximos Prazos</CardLabel>
-          {prazos.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '24px 16px', color: 'var(--text-muted)', fontSize: 12 }}>
-              <i className="fas fa-check-circle" style={{ fontSize: 26, display: 'block', opacity: .4, marginBottom: 8 }} />
-              Nenhum prazo critico nos proximos dias
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-              {prazos.slice(0, 5).map((prazo, i) => {
-                const dias = diasAteVencer(prazo.dataVencimento);
-                const isHoje = dias === 0;
-                const urgente = dias !== null && dias <= 2;
-                const critico = dias !== null && dias < 0;
-                const urgCls = isHoje ? 'today' : urgente ? 'soon' : 'later';
-                const urgTxt = critico ? 'Vencido' : isHoje ? 'Hoje' : dias === 1 ? 'Amanha' : `em ${dias}d`;
-                const dt = new Date(prazo.dataVencimento);
-                return (
-                  <div key={prazo.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 12,
-                    padding: '10px 12px', background: 'rgba(255,255,255,.03)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-                    borderRadius: 10, border: '1px solid var(--border)',
-                    cursor: 'pointer', transition: 'border-color .2s, transform .15s',
-                    animation: `floatUp .4s ease ${i * .06}s both`,
-                  }} onClick={() => navigate(`/processos/${prazo.processoId}`)}>
-                    <div style={{
-                      width: 38, height: 38, borderRadius: 10,
-                      background: 'rgba(201,168,76,.12)', border: '1px solid rgba(201,168,76,.2)',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                    }}>
-                      <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--accent)', lineHeight: 1 }}>{dt.getDate()}</div>
-                      <div style={{ fontSize: 8, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.5px' }}>{MONTHS[dt.getMonth()]}</div>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {prazo.titulo}
-                      </div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                        {prazo.processo?.numero || prazo.processo?.numeroCnj || 'Prazo geral'}
-                      </div>
-                    </div>
-                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${critico || isHoje ? 'animate-pulse' : ''}`}
-                      style={{
-                        background: critico ? 'rgba(239,68,68,.15)' : urgente || isHoje ? 'rgba(245,158,11,.15)' : 'rgba(16,185,129,.12)',
-                        color: critico ? '#ef4444' : urgente || isHoje ? '#f59e0b' : '#10b981',
-                        border: `1px solid ${critico ? 'rgba(239,68,68,.25)' : urgente || isHoje ? 'rgba(245,158,11,.25)' : 'rgba(16,185,129,.2)'}`,
-                        flexShrink: 0,
-                      }}>
-                      {urgTxt}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </DashCard>
-
-        {/* ═══ ROW 6: Atividades do Dia (col 1) + Seus Processos (col 2) ═══ */}
-        <DashCard colSpan="1" delay={420}>
-          <CardLabel icon="fa-stream">Atividades do Dia</CardLabel>
-          {timelineItems.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '24px 16px', color: 'var(--text-muted)', fontSize: 12 }}>
-              <i className="fas fa-moon" style={{ fontSize: 26, display: 'block', opacity: .4, marginBottom: 8 }} />
-              Sem atividades registradas hoje
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 0, position: 'relative' }}>
-              {timelineItems.map((item, ii) => {
-                const toMins = t => { if (!t) return -1; const [h, m] = t.split(':').map(Number); return h * 60 + (m || 0); };
-                const itemStart = toMins(item.time);
-                const isActive = item.time && nowMins >= itemStart && nowMins <= itemStart + 60;
-                const isDone = item.time && nowMins > itemStart + 60;
-                const isLast = ii === timelineItems.length - 1;
-                const icon = item.type === 'prazo' ? 'fa-clock' : 'fa-gavel';
-
-                return (
-                  <div key={ii} style={{
-                    display: 'flex', gap: 12, paddingBottom: isLast ? 0 : 14, position: 'relative',
-                    animation: `floatUp .4s ease ${ii * .08}s both`,
-                  }}>
-                    {!isLast && <div style={{
-                      width: 1, background: 'var(--border)',
-                      position: 'absolute', left: 56, top: 4, bottom: 0,
-                    }} />}
-                    <div style={{ width: 44, textAlign: 'right', flexShrink: 0 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                        {item.time || '—'}
-                      </div>
-                    </div>
-                    <div style={{
-                      flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', width: 16,
-                    }}>
-                      <div style={{
-                        width: 10, height: 10, borderRadius: '50%',
-                        border: `2px solid ${isActive ? 'var(--accent)' : isDone ? 'var(--success)' : 'var(--accent)'}`,
-                        background: isActive ? 'var(--accent)' : isDone ? 'var(--success)' : 'rgba(255,255,255,.03)',
-                        boxShadow: isActive ? '0 0 0 3px rgba(201,168,76,.25)' : 'none',
-                        flexShrink: 0, marginTop: 2,
-                      }} />
-                    </div>
-                    <div style={{ flex: 1, paddingBottom: 6 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600 }}>
-                        <i className={`fas ${icon}`} style={{ marginRight: 5, opacity: .6, fontSize: 10 }} />{item.title}
-                      </div>
-                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{item.sub}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </DashCard>
-
-        <DashCard colSpan="2" delay={490}>
-          <CardLabel icon="fa-folder-open">Seus Processos</CardLabel>
-          {processosLista.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '24px 16px', color: 'var(--text-muted)', fontSize: 12 }}>
-              <i className="fas fa-folder-open" style={{ fontSize: 26, display: 'block', opacity: .4, marginBottom: 8 }} />
-              Nenhum processo cadastrado ainda
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {processosLista.map((p, pi) => {
-                const color = accentOf(pi);
-                return (
-                  <div key={p.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '9px 12px', background: 'rgba(255,255,255,.03)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-                    borderRadius: 10, border: '1px solid var(--border)',
-                    cursor: 'pointer', transition: 'border-color .2s, transform .15s',
-                    position: 'relative', minWidth: 0,
-                    animation: `floatUp .4s ease ${pi * .05}s both`,
-                  }} onClick={() => navigate(`/processos/${p.id}`)}>
-                    <div style={{
-                      width: 30, height: 30, borderRadius: 8,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 13, flexShrink: 0,
-                      background: `${color}20`, border: `1px solid ${color}35`, color: color,
-                    }}>
-                      <i className="fas fa-scale-balanced" style={{ fontSize: 12 }} />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {p.nomeCliente || p.numero || p.numeroCnj}
-                      </div>
-                      {p.nomeCliente && <div style={{ fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.numero || p.numeroCnj}</div>}
-                    </div>
-                    <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
-                      {p.tribunal && (
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                          style={{ background: `${tribunalStyle(p.tribunal).bg}`, color: tribunalStyle(p.tribunal).accent, border: `1px solid ${tribunalStyle(p.tribunal).border}` }}>
-                          {p.tribunal}
-                        </span>
-                      )}
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                        style={{ color: 'var(--text-muted)', borderColor: 'var(--border)', border: '1px solid var(--border)', background: 'transparent' }}>
-                        {p.movimentacoes} mov.
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </DashCard>
-
-        {/* ═══ ROW 7: Notificações Recentes (full) — if any ════════ */}
-        {notificacoes.length > 0 && (
-          <DashCard colSpan="full" delay={560} style={{
-            padding: 0,
-            border: '1px solid rgba(167,139,250,.2)',
-            background: 'linear-gradient(135deg, rgba(167,139,250,.04), rgba(10,10,10,.85))',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-          }}>
-            <div style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '16px 24px', borderBottom: '1px solid rgba(167,139,250,.12)',
-            }}>
-              <h3 style={{ fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: '#a78bfa' }} />
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5" style={{ background: '#a78bfa' }} />
-                </span>
-                <span style={{ color: '#a78bfa' }}>
-                  {notificacoes.length} {notificacoes.length === 1 ? 'Nova Notificacao' : 'Novas Notificacoes'}
-                </span>
-              </h3>
-              <button onClick={() => navigate('/notificacoes')}
-                style={{ fontSize: 12, fontWeight: 600, color: '#a78bfa', background: 'none', border: 'none', cursor: 'pointer' }}>
-                Ver todas
-              </button>
-            </div>
-            <div>
-              {notificacoes.map((notif, i) => {
-                const nc = notifConfig[notif.tipo] || notifConfig.INFO;
-                return (
-                  <div key={notif.id}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 24px',
-                      cursor: 'pointer', transition: 'background .15s',
-                      borderBottom: i < notificacoes.length - 1 ? '1px solid rgba(167,139,250,.08)' : 'none',
-                      animation: `floatUp .4s ease ${i * .05}s both`,
-                    }}
-                    onClick={() => notif.processoId ? navigate(`/processos/${notif.processoId}`) : navigate('/notificacoes')}>
-                    <div style={{
-                      width: 34, height: 34, borderRadius: 12, background: nc.bg, flexShrink: 0,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      <i className={`fas ${nc.icon}`} style={{ fontSize: 12, color: nc.color }} />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{notif.titulo}</p>
-                      <p style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{notif.mensagem}</p>
-                    </div>
-                    <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>
-                      {formatarTempoRelativo(notif.criadoEm)}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </DashCard>
-        )}
-
-      </div>{/* /grid */}
+          </div>
+        );
+      })()}
     </div>
   );
 }

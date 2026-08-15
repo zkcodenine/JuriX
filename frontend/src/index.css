@@ -387,6 +387,21 @@ option:checked {
   color: var(--accent);
 }
 
+/* Padroniza a APARÊNCIA de todos os selects (Prioridade, Processo, Tipo,
+   Etiqueta...): remove a seta nativa do SO e usa uma seta dourada própria,
+   deixando todos idênticos e no padrão do sistema. */
+select.input-base,
+.input-base select,
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%23C9A84C' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.85rem center;
+  padding-right: 2.2rem;
+}
+
 /* ─── Gold Gradient Background ──────────── */
 .bg-gold-gradient {
   background:
