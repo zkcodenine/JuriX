@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const zlib = require('zlib');
 const auth = require('../middlewares/auth');
+const { bloqueiaEscritaSemPlano } = require('../middlewares/limitePlano');
 const { planoAtivo } = require('../middlewares/requerPlanoPago');
 const { prisma } = require('../config/database');
 const { caminhoDoDocumento } = require('../config/storage');
@@ -11,6 +12,10 @@ const notificationService = require('../services/notificationService');
 const { whereProcessoVisivel, whereProcessoEditavel } = require('../utils/acessoProcesso');
 
 router.use(auth);
+// Cota do plano gratuito: acima de 5 processos a conta sem plano ativo entra
+// em modo somente-leitura ate assinar (ou excluir processos). GET e DELETE
+// continuam liberados de proposito — ver middlewares/limitePlano.js.
+router.use(bloqueiaEscritaSemPlano);
 
 // Limite de armazenamento total do plano gratuito (500 MB).
 const LIMITE_STORAGE_FREE = 500 * 1024 * 1024;

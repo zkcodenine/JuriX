@@ -38,6 +38,22 @@ router.post('/disconnect', auth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Sincronizar agora (autenticado) ───────────────
+// Espelha na Google Agenda tudo que já está salvo no JuriX e ainda não tem
+// evento lá: eventos da agenda, prazos de tarefas, prazos processuais e
+// vencimentos de parcelas. Idempotente — pode ser chamado quantas vezes quiser.
+router.post('/sincronizar', auth, async (req, res, next) => {
+  try {
+    const resumo = await gcal.sincronizarTudo(req.usuario.id, {
+      incluirPassados: req.body?.incluirPassados === true,
+    });
+    if (resumo.ignorado) {
+      return res.status(400).json({ error: `Não foi possível sincronizar: ${resumo.ignorado}.`, resumo });
+    }
+    res.json({ ok: true, resumo });
+  } catch (err) { next(err); }
+});
+
 // ─── Callback do OAuth (SEM auth — vem do Google) ──
 // O usuário é identificado pelo `state` (id do usuário JuriX).
 router.get('/callback', async (req, res) => {
@@ -58,7 +74,19 @@ router.get('/callback', async (req, res) => {
 
     await gcal.conectarComCodigo(code, state);
     logger.info(`Google Agenda conectada para usuário ${state}`);
-    res.send(paginaHtml('Google Agenda conectada!', 'Seus eventos do JuriX agora serão sincronizados com a sua Google Agenda.', true));
+
+    // Espelha retroativamente o que já estava salvo no JuriX. Em segundo plano
+    // porque esta página é o retorno do navegador do Google — ela precisa
+    // responder já, e o backfill pode levar vários segundos com muitos itens.
+    gcal.sincronizarTudo(state)
+      .then((r) => logger.info(`Backfill pós-conexão do usuário ${state}: ${JSON.stringify(r)}`))
+      .catch((e) => logger.warn(`Backfill pós-conexão falhou: ${e.message}`));
+
+    res.send(paginaHtml(
+      'Google Agenda conectada!',
+      'Estamos enviando para a sua Google Agenda os compromissos, prazos e vencimentos que já estavam no JuriX. Isso leva alguns segundos.',
+      true
+    ));
   } catch (err) {
     logger.error('Erro no callback Google:', err.message);
     res.status(500).send(paginaHtml('Falha na conexão', 'Não foi possível concluir a conexão com o Google. Tente novamente.', false));

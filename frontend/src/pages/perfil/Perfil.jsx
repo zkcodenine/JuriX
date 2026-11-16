@@ -93,6 +93,29 @@ function GoogleAgendaCard() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['google-status'] }); toast.success('Google Agenda desconectada.'); },
   });
 
+  // Reenvia para a Google Agenda tudo que ja estava salvo no JuriX e ainda nao
+  // chegou la: compromissos da agenda, prazos de tarefas, prazos processuais e
+  // vencimentos de parcelas. Serve tanto para o primeiro envio quanto para
+  // recuperar o que falhou por queda de rede.
+  const sincronizarMut = useMutation({
+    mutationFn: () => api.post('/google/sincronizar').then(r => r.data),
+    onSuccess: ({ resumo }) => {
+      const total = resumo.eventos + resumo.tarefas + resumo.prazos + resumo.parcelas;
+      if (total === 0) {
+        toast.success('Tudo ja estava sincronizado com a Google Agenda.');
+      } else {
+        const partes = [];
+        if (resumo.eventos)  partes.push(`${resumo.eventos} evento(s)`);
+        if (resumo.tarefas)  partes.push(`${resumo.tarefas} prazo(s) de tarefa`);
+        if (resumo.prazos)   partes.push(`${resumo.prazos} prazo(s) processual(is)`);
+        if (resumo.parcelas) partes.push(`${resumo.parcelas} vencimento(s)`);
+        toast.success(`Enviado para a Google Agenda: ${partes.join(', ')}.`, { duration: 6000 });
+      }
+      if (resumo.falhas) toast.error(`${resumo.falhas} item(ns) nao puderam ser enviados. Tente novamente.`);
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Nao foi possivel sincronizar agora.'),
+  });
+
   const conectado = status?.conectado;
 
   return (
@@ -117,9 +140,19 @@ function GoogleAgendaCard() {
         </div>
         <div className="flex-shrink-0 flex items-center gap-2">
           {conectado ? (
-            <button onClick={() => desconectarMut.mutate()} disabled={desconectarMut.isPending} className="btn btn-ghost text-sm" style={{ color: 'var(--danger)' }}>
-              {desconectarMut.isPending ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <i className="fas fa-link-slash" />} Desconectar
-            </button>
+            <>
+              <button
+                onClick={() => sincronizarMut.mutate()}
+                disabled={sincronizarMut.isPending}
+                className="btn btn-ghost text-sm"
+                title="Enviar para a Google Agenda tudo que ainda nao foi sincronizado"
+              >
+                {sincronizarMut.isPending ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <i className="fas fa-rotate" />} Sincronizar agora
+              </button>
+              <button onClick={() => desconectarMut.mutate()} disabled={desconectarMut.isPending} className="btn btn-ghost text-sm" style={{ color: 'var(--danger)' }}>
+                {desconectarMut.isPending ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <i className="fas fa-link-slash" />} Desconectar
+              </button>
+            </>
           ) : status?.configurado === false ? (
             <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(255,255,255,.05)', color: 'var(--text-muted)' }}>Em breve</span>
           ) : (

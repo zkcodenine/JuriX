@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import api from '../../services/api';
+import PlanoBanner from '../PlanoBanner';
 import useConnectionStore from '../../store/connectionStore';
 import useAgendaAlerts from '../../hooks/useAgendaAlerts';
 import useDesktopAlerts from '../../hooks/useDesktopAlerts';
@@ -150,6 +151,9 @@ export default function Layout() {
         style={{ marginLeft: sidebarWidth }}
       >
         <Header titulo={pageInfo.titulo} subtitulo={pageInfo.subtitulo} />
+
+        {/* Cota do plano gratuito (some com plano ativo) */}
+        <PlanoBanner />
 
         {/* ── Connection Status Banners ─────────────────── */}
 

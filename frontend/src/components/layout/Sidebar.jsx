@@ -3,7 +3,8 @@ import { useState, useMemo } from 'react';
 import useAuthStore from '../../store/authStore';
 import useThemeStore from '../../store/themeStore';
 import { getIniciais } from '../../utils/formatters';
-const DEFAULT_AVATAR = '/default-avatar.svg';
+import { urlDoArquivo, caminho } from '../../utils/baseUrl';
+const DEFAULT_AVATAR = caminho('/default-avatar.svg');
 import PerfilModal from '../perfil/PerfilModal';
 
 const navItems = [
@@ -92,14 +93,7 @@ export default function Sidebar({ naoLidas = 0, processosAlertas = 0, tarefasAle
   const ps    = planBadge[plano] || planBadge.GRATUITO;
 
   // Build avatar URL — detecta se frontend está em :3000 (Vite dev) e aponta p/ backend :3001
-  const buildAvatarUrl = (path) => {
-    if (!path) return null;
-    if (/^https?:/i.test(path)) return path;
-    const origin = window.location.port === '3000'
-      ? window.location.origin.replace(':3000', ':3001')
-      : window.location.origin;
-    return `${origin}${path.startsWith('/') ? '' : '/'}${path}`;
-  };
+  const buildAvatarUrl = urlDoArquivo;
   const avatarBase = buildAvatarUrl(usuario?.avatar);
   // Cache-buster estável: atualiza apenas quando avatar muda ou upload novo
   const avatarUrl = useMemo(() => {

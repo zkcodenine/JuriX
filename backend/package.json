@@ -11,7 +11,9 @@
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
     "db:seed": "node prisma/seed.js",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "test": "node testes/executar.js",
+    "test:listar": "node testes/executar.js --listar"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

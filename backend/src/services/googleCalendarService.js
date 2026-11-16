@@ -303,6 +303,145 @@ async function sincronizarParcela(usuarioId, parcela, info) {
   }
 }
 
+// ─── Sincronização completa (backfill) ────────────────────────────────────
+// Espelha na Google Agenda TUDO que já estava salvo no JuriX e ainda não tem
+// evento lá. Sem isto, só o que fosse criado DEPOIS de conectar a conta ia
+// para o Google — os compromissos já cadastrados ficavam de fora, que é
+// exatamente o que o usuário espera ver sincronizado.
+//
+// Roda em três situações:
+//   1. logo após conectar a conta Google (automático, em segundo plano)
+//   2. quando o usuário clica em "Sincronizar agora"
+//   3. no job periódico, para recuperar o que falhou por rede/quota
+//
+// Idempotente: só toca em registros SEM googleEventId. O que já foi espelhado
+// é mantido como está.
+const LIMITE_RETROATIVO_DIAS = 30; // compromissos antigos demais não viram lembrete
+
+async function sincronizarTudo(usuarioId, { incluirPassados = false } = {}) {
+  const resumo = { eventos: 0, tarefas: 0, prazos: 0, parcelas: 0, falhas: 0, ignorado: null };
+
+  if (!isConfigured()) { resumo.ignorado = 'credenciais Google não configuradas no servidor'; return resumo; }
+  const auth = await clienteDoUsuario(usuarioId);
+  if (!auth) { resumo.ignorado = 'conta Google não conectada'; return resumo; }
+
+  const corte = incluirPassados
+    ? new Date(0)
+    : new Date(Date.now() - LIMITE_RETROATIVO_DIAS * 24 * 3600 * 1000);
+
+  // 1. Eventos da agenda
+  try {
+    const eventos = await prisma.eventoAgenda.findMany({
+      where: { usuarioId, googleEventId: null, data: { gte: corte } },
+      orderBy: { data: 'asc' },
+    });
+    for (const evento of eventos) {
+      const id = await criarEventoGoogle(usuarioId, evento);
+      if (id) {
+        await prisma.eventoAgenda.update({ where: { id: evento.id }, data: { googleEventId: id } });
+        resumo.eventos++;
+      } else resumo.falhas++;
+    }
+  } catch (err) { logger.warn(`Backfill eventos falhou: ${err.message}`); }
+
+  // 2. Prazos de tarefas (só as não concluídas e com opt-in ligado)
+  try {
+    const tarefas = await prisma.tarefa.findMany({
+      where: {
+        usuarioId, googleEventId: null, googleSync: true,
+        status: { in: ['PENDENTE', 'EM_ANDAMENTO'] }, prazo: { gte: corte },
+      },
+      orderBy: { prazo: 'asc' },
+    });
+    for (const tarefa of tarefas) {
+      const id = await sincronizarPrazoTarefa(usuarioId, tarefa);
+      if (id) {
+        await prisma.tarefa.update({ where: { id: tarefa.id }, data: { googleEventId: id } });
+        resumo.tarefas++;
+      } else resumo.falhas++;
+    }
+  } catch (err) { logger.warn(`Backfill tarefas falhou: ${err.message}`); }
+
+  // 3. Prazos processuais dos processos do usuário
+  try {
+    const prazos = await prisma.prazo.findMany({
+      where: {
+        googleEventId: null, googleSync: true,
+        status: { not: 'CUMPRIDO' },
+        dataVencimento: { gte: corte },
+        processo: { usuarioId },
+      },
+      orderBy: { dataVencimento: 'asc' },
+    });
+    for (const prazo of prazos) {
+      const id = await sincronizarPrazoProcesso(usuarioId, prazo);
+      if (id) {
+        await prisma.prazo.update({ where: { id: prazo.id }, data: { googleEventId: id } });
+        resumo.prazos++;
+      } else resumo.falhas++;
+    }
+  } catch (err) { logger.warn(`Backfill prazos falhou: ${err.message}`); }
+
+  // 4. Parcelas de honorário em aberto
+  try {
+    const parcelas = await prisma.parcela.findMany({
+      where: {
+        googleEventId: null,
+        status: { in: ['PENDENTE', 'ATRASADO'] },
+        vencimento: { gte: corte },
+        honorario: { googleSync: true, processo: { usuarioId } },
+      },
+      include: {
+        honorario: {
+          select: {
+            notificarVencimento: true, notificarDiasAntes: true,
+            processo: { select: { numero: true, cobrancaNome: true } },
+          },
+        },
+      },
+      orderBy: { vencimento: 'asc' },
+    });
+    for (const parcela of parcelas) {
+      const h = parcela.honorario;
+      const id = await sincronizarParcela(usuarioId, parcela, {
+        cliente: h.processo?.cobrancaNome || h.processo?.numero || 'cliente',
+        valor: Number(parcela.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+        diasAntes: h.notificarVencimento ? (h.notificarDiasAntes ?? 3) : 0,
+      });
+      if (id) {
+        await prisma.parcela.update({ where: { id: parcela.id }, data: { googleEventId: id } });
+        resumo.parcelas++;
+      } else resumo.falhas++;
+    }
+  } catch (err) { logger.warn(`Backfill parcelas falhou: ${err.message}`); }
+
+  logger.info(`Google Agenda — backfill do usuário ${usuarioId}: ${JSON.stringify(resumo)}`);
+  return resumo;
+}
+
+// Remove do Google todos os eventos espelhados de um processo que está sendo
+// excluído. Sem isto, apagar o processo deixava lembretes órfãos na agenda do
+// advogado — prazos de um caso que não existe mais.
+async function limparEventosDoProcesso(usuarioId, processoId) {
+  try {
+    if (!isConfigured()) return;
+    const auth = await clienteDoUsuario(usuarioId);
+    if (!auth) return;
+
+    const [prazos, tarefas, parcelas] = await Promise.all([
+      prisma.prazo.findMany({ where: { processoId, googleEventId: { not: null } }, select: { googleEventId: true } }),
+      prisma.tarefa.findMany({ where: { processoId, googleEventId: { not: null } }, select: { googleEventId: true } }),
+      prisma.parcela.findMany({ where: { honorario: { processoId }, googleEventId: { not: null } }, select: { googleEventId: true } }),
+    ]);
+
+    for (const { googleEventId } of [...prazos, ...tarefas, ...parcelas]) {
+      await deletarEventoGoogle(usuarioId, googleEventId);
+    }
+  } catch (err) {
+    logger.warn(`Limpeza de eventos do processo falhou: ${err.message}`);
+  }
+}
+
 module.exports = {
   isConfigured,
   gerarAuthUrl,
@@ -314,4 +453,6 @@ module.exports = {
   sincronizarPrazoTarefa,
   sincronizarPrazoProcesso,
   sincronizarParcela,
+  sincronizarTudo,
+  limparEventosDoProcesso,
 };

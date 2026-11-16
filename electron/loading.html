@@ -66,24 +66,63 @@
       text-transform: uppercase;
     }
 
-    .spinner-wrap {
-      margin-top: 44px;
+    .progress-wrap {
+      margin-top: 40px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 18px;
+      gap: 14px;
+      width: 420px;
+      max-width: 72vw;
     }
 
-    .spinner {
-      width: 30px;
-      height: 30px;
-      border: 2.5px solid rgba(201,168,76,.15);
-      border-top-color: #c9a84c;
-      border-radius: 50%;
-      animation: spin 0.85s linear infinite;
+    /* Trilho da barra de progresso. */
+    .bar {
+      position: relative;
+      width: 100%;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.07);
+      overflow: hidden;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
     }
 
-    @keyframes spin { to { transform: rotate(360deg); } }
+    /* Preenchimento real — a largura é a porcentagem concluída. */
+    .bar-fill {
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #8a6f23, #c9a84c 55%, #e7cf84);
+      box-shadow: 0 0 14px rgba(201,168,76,.45);
+      /* A barra NUNCA volta atrás; só cresce, em movimento suave. */
+      transition: width .45s cubic-bezier(.25,.8,.3,1);
+    }
+
+    /* Brilho que percorre o trecho já preenchido — indica atividade mesmo
+       quando a porcentagem fica parada esperando o backend. */
+    .bar-fill::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent);
+      transform: translateX(-100%);
+      animation: shimmer 1.8s ease-in-out infinite;
+    }
+
+    @keyframes shimmer {
+      0%   { transform: translateX(-100%); }
+      60%  { transform: translateX(100%); }
+      100% { transform: translateX(100%); }
+    }
+
+    .linha-info {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      gap: 16px;
+    }
 
     /* Mensagem de status — fonte moderna, maior e bem mais visível. */
     .status {
@@ -95,10 +134,34 @@
       min-height: 22px;
       opacity: 1;
       transition: opacity .35s ease;
+      text-align: left;
+      flex: 1;
     }
     .status.fade { opacity: 0; }
-    .status { max-width: 520px; }
     .status .dots { color: #c9a84c; }
+
+    .percent {
+      font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      color: #c9a84c;
+      font-variant-numeric: tabular-nums;
+      min-width: 42px;
+      text-align: right;
+    }
+
+    /* Aviso da primeira abertura — só aparece quando o main process diz que
+       esta é mesmo a primeira abertura depois de instalar/atualizar. */
+    .aviso {
+      margin-top: 14px;
+      font-size: 12px;
+      color: #8a8a93;
+      max-width: 460px;
+      line-height: 1.5;
+      opacity: 0;
+      transition: opacity .4s ease;
+    }
+    .aviso.visivel { opacity: 1; }
   </style>
 </head>
 <body>
@@ -107,15 +170,76 @@
     <div class="title">JURIX</div>
     <div class="subtitle">Sistema Jurídico</div>
 
-    <div class="spinner-wrap">
-      <div class="spinner"></div>
-      <div class="status" id="statusText">Preparando a papelada<span class="dots">…</span></div>
+    <div class="progress-wrap">
+      <div class="bar"><div class="bar-fill" id="barFill"></div></div>
+      <div class="linha-info">
+        <div class="status" id="statusText">Preparando a papelada<span class="dots">…</span></div>
+        <div class="percent" id="percentText">0%</div>
+      </div>
+      <div class="aviso" id="avisoPrimeira">
+        Primeira abertura após a instalação — o Windows ainda está verificando os
+        arquivos novos. Pode levar até 1 minuto. Nas próximas vezes abre em segundos.
+      </div>
     </div>
   </div>
 
   <script>
-    const statusEl = document.getElementById('statusText')
+    const statusEl  = document.getElementById('statusText')
+    const barEl     = document.getElementById('barFill')
+    const pctEl     = document.getElementById('percentText')
+    const avisoEl   = document.getElementById('avisoPrimeira')
 
+    // O main process informa, pela query string, se esta é a primeira abertura
+    // depois de instalar/atualizar. Só nesse caso o aviso de demora aparece —
+    // nas aberturas seguintes o app sobe em segundos e o texto só assustaria.
+    const params = new URLSearchParams(location.search)
+    const primeiraAbertura = params.get('primeira') === '1'
+
+    if (primeiraAbertura) {
+      avisoEl.classList.add('visivel')
+    }
+
+    // Duração esperada do boot. Primeira abertura: o antivírus varre os ~700MB
+    // recém-gravados e o backend leva 30-45s. Abertura normal: ~6-10s.
+    const DURACAO_ESTIMADA_MS = primeiraAbertura ? 45000 : 10000
+
+    // ── Progresso ────────────────────────────────────────────────────────────
+    // Duas fontes alimentam a barra e vence sempre a MAIOR:
+    //   1. marcos reais reportados pelo main process (window.jurixProgresso)
+    //   2. uma estimativa por tempo decorrido, que desacelera e satura em 90%
+    // Assim a barra nunca engana dizendo 100% antes da hora, nem fica parada.
+    let pctReal = 0        // último marco real recebido
+    let pctMostrado = 0    // o que está desenhado (nunca retrocede)
+
+    function estimativaPorTempo(decorridoMs) {
+      // Curva que cresce rápido no início e satura: 90 * (1 - e^(-t/τ)).
+      const tau = DURACAO_ESTIMADA_MS / 2.2
+      return 90 * (1 - Math.exp(-decorridoMs / tau))
+    }
+
+    function desenhar(pct) {
+      const valor = Math.max(0, Math.min(100, pct))
+      if (valor <= pctMostrado) return
+      pctMostrado = valor
+      barEl.style.width = valor.toFixed(1) + '%'
+      pctEl.textContent = Math.round(valor) + '%'
+    }
+
+    const inicio = Date.now()
+    setInterval(() => {
+      desenhar(Math.max(pctReal, estimativaPorTempo(Date.now() - inicio)))
+    }, 120)
+
+    // API chamada pelo main process a cada marco real do boot.
+    window.jurixProgresso = function (pct, texto) {
+      if (typeof pct === 'number' && pct > pctReal) pctReal = pct
+      desenhar(pctReal)
+      if (texto) {
+        mostrar(texto, true)
+      }
+    }
+
+    // ── Mensagens ────────────────────────────────────────────────────────────
     // Mistura de status reais (o que o app está mesmo fazendo) com "brincadeiras"
     // que qualquer advogado entende — para a espera ser leve.
     const mensagens = [
@@ -134,23 +258,21 @@
     ]
 
     let idx = 0
-    const inicio = Date.now()
+    let travadoPeloMain = false  // marco real tem prioridade sobre o rodízio
 
-    function mostrar(texto) {
+    function mostrar(texto, doMain = false) {
+      if (doMain) travadoPeloMain = true
       statusEl.classList.add('fade')
       setTimeout(() => {
         statusEl.innerHTML = texto + '<span class="dots">…</span>'
         statusEl.classList.remove('fade')
+        // Depois de um marco real, volta ao rodízio após alguns segundos.
+        if (doMain) setTimeout(() => { travadoPeloMain = false }, 4000)
       }, 350)
     }
 
     setInterval(() => {
-      // Primeira abertura após um update é lenta (o antivírus varre os arquivos
-      // novos e o backend leva ~40s em vez de ~6s). Avisa em vez de parecer travado.
-      if (Date.now() - inicio > 22000) {
-        mostrar('Primeira abertura após a atualização — pode levar até 1 minuto')
-        return
-      }
+      if (travadoPeloMain) return
       idx = (idx + 1) % mensagens.length
       mostrar(mensagens[idx])
     }, 2100)

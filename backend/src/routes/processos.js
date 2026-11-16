@@ -3,11 +3,16 @@ const { body, param } = require('express-validator');
 const ctrl = require('../controllers/processosController');
 const compart = require('../controllers/compartilhamentoController');
 const auth = require('../middlewares/auth');
+const { bloqueiaEscritaSemPlano } = require('../middlewares/limitePlano');
 const validate = require('../middlewares/validate');
 const auditLog = require('../middlewares/audit');
 const requerPlanoPago = require('../middlewares/requerPlanoPago');
 
 router.use(auth);
+// Cota do plano gratuito: acima de 5 processos a conta sem plano ativo entra
+// em modo somente-leitura ate assinar (ou excluir processos). GET e DELETE
+// continuam liberados de proposito — ver middlewares/limitePlano.js.
+router.use(bloqueiaEscritaSemPlano);
 
 // ─── CRUD de processos ─────────────────────────────
 router.get('/', ctrl.listar);

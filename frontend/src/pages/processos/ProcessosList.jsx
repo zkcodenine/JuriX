@@ -386,6 +386,8 @@ export default function ProcessosList() {
     },
     onSuccess: (res) => {
       qc.invalidateQueries(['processos']);
+      // A cota do plano mudou — atualiza o aviso de limite no topo.
+      qc.invalidateQueries({ queryKey: ['status-plano'] });
       toast.success('Processo criado!');
       setShowNovo(false);
       setNovoForm(formVazio);
@@ -405,6 +407,8 @@ export default function ProcessosList() {
     mutationFn: (id) => api.delete(`/processos/${id}`),
     onSuccess: () => {
       qc.invalidateQueries(['processos']);
+      // A cota do plano mudou — atualiza o aviso de limite no topo.
+      qc.invalidateQueries({ queryKey: ['status-plano'] });
       toast.success('Processo excluído.');
       setDeletando(null);
     },
@@ -558,6 +562,8 @@ export default function ProcessosList() {
           onSuccess={(proc) => {
             if (proc?.upgrade) { setShowVincular(false); setShowUpgrade(true); return; }
             qc.invalidateQueries(['processos']);
+      // A cota do plano mudou — atualiza o aviso de limite no topo.
+      qc.invalidateQueries({ queryKey: ['status-plano'] });
             setShowVincular(false);
             navigate(`/processos/${proc.id}`);
           }}

@@ -2,8 +2,25 @@ const router = require('express').Router();
 const auth = require('../middlewares/auth');
 const { prisma } = require('../config/database');
 const logger = require('../config/logger');
+const { situacaoPlano } = require('../middlewares/limitePlano');
 
 router.use(auth);
+
+// ─── Situação do plano do usuário ──────────────────
+// Alimenta o aviso de limite no frontend: quantos processos a conta tem, se
+// ainda pode criar outro e se já está acima da cota (modo somente-leitura).
+// Lê do banco, não do cache de 5 min do auth, para refletir uma assinatura
+// ativada agora mesmo.
+router.get('/status-plano', async (req, res, next) => {
+  try {
+    const usuario = await prisma.usuario.findUnique({
+      where: { id: req.usuario.id },
+      select: { id: true, plano: true, planoExpiracao: true, perfil: true },
+    });
+    if (!usuario) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    res.json(await situacaoPlano(usuario));
+  } catch (err) { next(err); }
+});
 
 // Link de pagamento fixo do Mercado Pago (checkout do plano Mensal — R$80).
 // Pode ser sobrescrito via env MERCADOPAGO_LINK_MENSAL.

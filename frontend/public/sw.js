@@ -8,13 +8,22 @@ const CACHE_NAME = 'jurix-cache-v1';
 const STATIC_CACHE = 'jurix-static-v1';
 const API_CACHE = 'jurix-api-v1';
 
+// Caminho base da aplicacao, derivado do escopo com que o SW foi
+// registrado. Publicado em https://nossosflows.com.br/jurix o escopo e
+// "/jurix/", e TUDO aqui precisa desse prefixo: sem ele o SW tentava
+// cachear "/dashboard" na raiz do dominio e interceptava "/api/" de um
+// backend que nao e o nosso.
+// Sempre com "/" no inicio e SEM "/" no fim (vazio quando na raiz).
+const BASE_PATH = new URL(self.registration.scope).pathname.replace(/\/+$/, '');
+const caminho = (sufixo) => `${BASE_PATH}${sufixo}`;
+
 // Static assets to pre-cache on install
 const PRECACHE_URLS = [
-  '/',
-  '/dashboard',
-  '/favicon.svg',
-  '/logo.png',
-  '/manifest.json',
+  caminho('/'),
+  caminho('/dashboard'),
+  caminho('/favicon.svg'),
+  caminho('/logo.png'),
+  caminho('/manifest.json'),
 ];
 
 // ─── Install: pre-cache shell ─────────────────────────────
@@ -66,8 +75,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Fora do escopo da aplicacao (outro app no mesmo dominio) — nao e nosso.
+  if (url.origin === self.location.origin && BASE_PATH && !url.pathname.startsWith(BASE_PATH + '/')) return;
+
   // API requests: network-first with cache fallback
-  if (url.pathname.startsWith('/api/')) {
+  if (url.pathname.startsWith(caminho('/api/'))) {
     event.respondWith(networkFirstWithCache(request));
     return;
   }

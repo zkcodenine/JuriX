@@ -3,6 +3,8 @@ const { cacheGet, cacheSet, cacheDel, cacheDelPattern } = require('../config/red
 const datajudService = require('../services/datajudService');
 const notificationService = require('../services/notificationService');
 const gcal = require('../services/googleCalendarService');
+const { planoAtivo } = require('../middlewares/requerPlanoPago');
+const { LIMITE_GRATUITO, isentoDeCota } = require('../middlewares/limitePlano');
 const {
   whereProcessoVisivel, whereProcessoEditavel, podeVer, podeEditar, ehDono,
 } = require('../utils/acessoProcesso');
@@ -30,11 +32,16 @@ async function listar(req, res, next) {
     if (busca) {
       // MySQL usa collation case-insensitive por padrão — `mode` é exclusivo do
       // PostgreSQL e o Prisma rejeita a query se ele for enviado.
+      // `classe` é o tipo de ação ("Procedimento Comum", "Execução Fiscal"…) —
+      // é por ele que o advogado procura quando não lembra o número.
       where.AND.push({
         OR: [
           { numero: { contains: busca } },
           { numeroCnj: { contains: busca } },
           { assunto: { contains: busca } },
+          { classe: { contains: busca } },
+          { tribunal: { contains: busca } },
+          { vara: { contains: busca } },
           { partes: { some: { nome: { contains: busca } } } },
         ],
       });
@@ -73,12 +80,25 @@ async function listar(req, res, next) {
 // ─── Criar processo ────────────────────────────────
 async function criar(req, res, next) {
   try {
-    // Limite de 5 processos para plano GRATUITO
-    const usuario = await prisma.usuario.findUnique({ where: { id: req.usuario.id }, select: { plano: true } });
-    if (usuario?.plano === 'GRATUITO') {
+    // Limite da conta gratuita. Le o plano do banco (e nao do cache de 5 min
+    // do auth) para que uma assinatura recem-ativada libere na hora.
+    //
+    // `planoAtivo` respeita a expiracao: antes a checagem era
+    // `plano === 'GRATUITO'`, entao quem assinou o MENSAL uma vez e deixou
+    // vencer ficava com processos ilimitados para sempre.
+    const usuario = await prisma.usuario.findUnique({
+      where: { id: req.usuario.id },
+      select: { plano: true, planoExpiracao: true, perfil: true },
+    });
+    if (!planoAtivo(usuario) && !isentoDeCota(usuario)) {
       const count = await prisma.processo.count({ where: { usuarioId: req.usuario.id } });
-      if (count >= 5) {
-        return res.status(403).json({ error: 'Limite de 5 processos atingido no plano gratuito.', upgrade: true });
+      if (count >= LIMITE_GRATUITO) {
+        return res.status(403).json({
+          error: `Limite de ${LIMITE_GRATUITO} processos atingido no plano gratuito. Assine um plano para cadastrar mais.`,
+          upgrade: true,
+          processos: count,
+          limite: LIMITE_GRATUITO,
+        });
       }
     }
 
@@ -176,6 +196,11 @@ async function deletar(req, res, next) {
 
     const pid = req.params.id;
 
+    // Antes de apagar: tira da Google Agenda os prazos, tarefas e vencimentos
+    // deste processo. Depois do delete as linhas somem e os googleEventId junto —
+    // os lembretes ficariam órfãos na agenda do advogado para sempre.
+    await gcal.limparEventosDoProcesso(req.usuario.id, pid);
+
     // Deletar registros filhos em sequência (interactive transaction) para evitar
     // falhas silenciosas com FK constraints em $transaction array
     await prisma.$transaction(async (tx) => {
@@ -236,12 +261,25 @@ async function importarCNJ(req, res, next) {
   try {
     const { numeroCnj, tribunal, forcar } = req.body;
 
-    // Limite de 5 processos para plano GRATUITO
-    const usuario = await prisma.usuario.findUnique({ where: { id: req.usuario.id }, select: { plano: true } });
-    if (usuario?.plano === 'GRATUITO') {
+    // Limite da conta gratuita. Le o plano do banco (e nao do cache de 5 min
+    // do auth) para que uma assinatura recem-ativada libere na hora.
+    //
+    // `planoAtivo` respeita a expiracao: antes a checagem era
+    // `plano === 'GRATUITO'`, entao quem assinou o MENSAL uma vez e deixou
+    // vencer ficava com processos ilimitados para sempre.
+    const usuario = await prisma.usuario.findUnique({
+      where: { id: req.usuario.id },
+      select: { plano: true, planoExpiracao: true, perfil: true },
+    });
+    if (!planoAtivo(usuario) && !isentoDeCota(usuario)) {
       const count = await prisma.processo.count({ where: { usuarioId: req.usuario.id } });
-      if (count >= 5) {
-        return res.status(403).json({ error: 'Limite de 5 processos atingido no plano gratuito.', upgrade: true });
+      if (count >= LIMITE_GRATUITO) {
+        return res.status(403).json({
+          error: `Limite de ${LIMITE_GRATUITO} processos atingido no plano gratuito. Assine um plano para cadastrar mais.`,
+          upgrade: true,
+          processos: count,
+          limite: LIMITE_GRATUITO,
+        });
       }
     }
 

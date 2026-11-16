@@ -1,10 +1,15 @@
 const router = require('express').Router();
 const auth = require('../middlewares/auth');
+const { bloqueiaEscritaSemPlano } = require('../middlewares/limitePlano');
 const { prisma } = require('../config/database');
 const { whereProcessoEditavel, whereProcessoVisivel } = require('../utils/acessoProcesso');
 const gcal = require('../services/googleCalendarService');
 
 router.use(auth);
+// Cota do plano gratuito: acima de 5 processos a conta sem plano ativo entra
+// em modo somente-leitura ate assinar (ou excluir processos). GET e DELETE
+// continuam liberados de proposito — ver middlewares/limitePlano.js.
+router.use(bloqueiaEscritaSemPlano);
 
 // Parcelas agrupadas por situação (recebido no mês / pendente / atrasado),
 // com o processo vinculado — alimenta a listagem ao clicar nos cards do painel.
@@ -46,6 +51,57 @@ router.get('/por-status', async (req, res, next) => {
 });
 
 const fmtBRL = (v) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+// Mantem UMA parcela em dia com a Google Agenda, nos dois sentidos:
+// - deve ter evento (pendente/atrasada + honorario com googleSync) -> cria ou atualiza
+// - nao deve ter (paga, cancelada ou sync desligado) -> remove o que existir
+// Best-effort: falha de rede/quota nunca derruba a requisicao do usuario.
+async function sincronizarParcelaGoogle(usuarioId, parcelaId) {
+  try {
+    const parcela = await prisma.parcela.findUnique({
+      where: { id: parcelaId },
+      include: {
+        honorario: {
+          select: {
+            googleSync: true, notificarVencimento: true, notificarDiasAntes: true,
+            processo: { select: { numero: true, cobrancaNome: true } },
+          },
+        },
+      },
+    });
+    if (!parcela) return;
+
+    const h = parcela.honorario;
+    const emAberto = parcela.status === 'PENDENTE' || parcela.status === 'ATRASADO';
+    const deveTer = Boolean(h?.googleSync) && emAberto;
+
+    if (deveTer) {
+      const googleEventId = await gcal.sincronizarParcela(usuarioId, parcela, {
+        cliente: h.processo?.cobrancaNome || h.processo?.numero || 'cliente',
+        valor: fmtBRL(parcela.valor),
+        diasAntes: h.notificarVencimento ? (h.notificarDiasAntes ?? 3) : 0,
+      });
+      if (googleEventId && googleEventId !== parcela.googleEventId) {
+        await prisma.parcela.update({ where: { id: parcela.id }, data: { googleEventId } });
+      }
+    } else if (parcela.googleEventId) {
+      await gcal.deletarEventoGoogle(usuarioId, parcela.googleEventId);
+      await prisma.parcela.update({ where: { id: parcela.id }, data: { googleEventId: null } });
+    }
+  } catch { /* best-effort */ }
+}
+
+// Aplica a regra acima a todas as parcelas de um honorario.
+async function sincronizarParcelasDoHonorario(usuarioId, honorarioId) {
+  try {
+    const parcelas = await prisma.parcela.findMany({
+      where: { honorarioId }, select: { id: true },
+    });
+    for (const { id } of parcelas) {
+      await sincronizarParcelaGoogle(usuarioId, id);
+    }
+  } catch { /* best-effort */ }
+}
 
 function parseDateSafe(value) {
   if (!value) return new Date();
@@ -125,6 +181,12 @@ router.put('/:id', async (req, res, next) => {
     if (!existe) return res.status(404).json({ error: 'Honorário não encontrado.' });
 
     const hon = await prisma.honorario.update({ where: { id: req.params.id }, data: req.body });
+
+    // O opt-in de Google Agenda vive no honorário, mas os eventos ficam nas
+    // parcelas. Sem isto, desligar a sincronizacao deixava os lembretes la, e
+    // religar nao recriava nada.
+    await sincronizarParcelasDoHonorario(req.usuario.id, hon.id);
+
     res.json(hon);
   } catch (err) { next(err); }
 });
@@ -162,7 +224,12 @@ router.put('/:id/parcelas/:parcelaId', async (req, res, next) => {
     if (!existe) return res.status(404).json({ error: 'Parcela não encontrada.' });
 
     const parcela = await prisma.parcela.update({ where: { id: req.params.parcelaId }, data: req.body });
-    res.json(parcela);
+
+    // Parcela paga/cancelada nao deve continuar cobrando na agenda; valor ou
+    // vencimento alterados precisam chegar ao evento ja criado.
+    await sincronizarParcelaGoogle(req.usuario.id, parcela.id);
+
+    res.json(await prisma.parcela.findUnique({ where: { id: parcela.id } }));
   } catch (err) { next(err); }
 });
 
@@ -175,7 +242,11 @@ router.post('/:id/parcelas', async (req, res, next) => {
     if (!existe) return res.status(404).json({ error: 'Honorário não encontrado.' });
 
     const parcela = await prisma.parcela.create({ data: { ...req.body, honorarioId: req.params.id } });
-    res.status(201).json(parcela);
+
+    // Parcela adicionada depois tambem vai para a Google Agenda.
+    await sincronizarParcelaGoogle(req.usuario.id, parcela.id);
+
+    res.status(201).json(await prisma.parcela.findUnique({ where: { id: parcela.id } }));
   } catch (err) { next(err); }
 });
 

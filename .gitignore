@@ -25,9 +25,15 @@ storage/
 # Data migration dumps (Supabase → HostGator)
 backup/
 
-# Claude Code
-.claude/
+# Claude Code — configuracao local e worktrees ficam de fora.
+# Os agentes do projeto SAO versionados: fazem parte do processo de
+# entrega (o qa-regressivo e quem roda a suite antes de publicar).
+.claude/*
+!.claude/agents/
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Pacote de publicação web (gerado por build-web.ps1)
+deploy-web/

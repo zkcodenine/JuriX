@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
+import ProcessoSelect from '../../components/ProcessoSelect';
 import { formatarData, formatarTempoRelativo, prioridadeLabel, statusTarefaLabel } from '../../utils/formatters';
 
 const priorCor = { URGENTE: '#ef4444', ALTA: '#f59e0b', MEDIA: '#C9A84C', BAIXA: '#10b981' };
@@ -250,12 +251,6 @@ function NovaTarefaModal({ onClose, editTarefa }) {
   );
   const [novoSub, setNovoSub] = useState('');
 
-  const { data: processos = [] } = useQuery({
-    queryKey: ['processos-select'],
-    queryFn: () => api.get('/processos', { params: { limite: 200 } }).then(r => r.data?.processos || r.data?.items || []),
-    staleTime: 60000,
-  });
-
   const addSub = () => {
     const t = novoSub.trim();
     if (!t) return;
@@ -478,17 +473,10 @@ function NovaTarefaModal({ onClose, editTarefa }) {
                 (opcional)
               </span>
             </label>
-            <select
-              className="input-base"
-              style={{ fontSize: '0.875rem' }}
-              value={form.processoId || ''}
-              onChange={e => setForm(f => ({ ...f, processoId: e.target.value || null }))}
-            >
-              <option value="">Nenhum processo</option>
-              {processos.map(p => (
-                <option key={p.id} value={p.id}>{p.numeroCnj || p.numero}</option>
-              ))}
-            </select>
+            <ProcessoSelect
+              value={form.processoId}
+              onChange={(id) => setForm(f => ({ ...f, processoId: id }))}
+            />
           </div>
 
           {/* Descrição */}
