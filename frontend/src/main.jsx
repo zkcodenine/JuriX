@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import App from './App';
 import { initConnectionListeners } from './store/connectionStore';
+import { caminho } from './utils/baseUrl';
 import './index.css';
 
 /* ── Efeito ripple global em todos os .btn ─────────── */
@@ -26,7 +27,7 @@ initConnectionListeners();
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
-      .register('/sw.js')
+      .register(caminho('/sw.js'), { scope: caminho('/') })
       .then((reg) => {
         reg.addEventListener('updatefound', () => {
           const newWorker = reg.installing;

@@ -32,6 +32,25 @@ function EventoModal({ evento, etiquetas, onClose, onSaved }) {
     etiquetaId: evento?.etiquetaId || '',
   });
 
+  // Cadastro rápido de etiqueta, sem sair do modal de evento. Criada aqui, já
+  // entra selecionada — era o motivo de o usuário ter que abrir "Etiquetas",
+  // cadastrar e voltar para começar o evento de novo.
+  const [novaEtiqueta, setNovaEtiqueta] = useState(null); // null = painel fechado
+
+  const criarEtiqueta = useMutation({
+    mutationFn: () => api.post('/agenda/etiquetas', {
+      nome: novaEtiqueta.nome.trim(),
+      cor: novaEtiqueta.cor,
+    }).then(r => r.data),
+    onSuccess: (etq) => {
+      qc.invalidateQueries({ queryKey: ['agenda-etiquetas'] });
+      setForm(f => ({ ...f, etiquetaId: etq.id }));
+      setNovaEtiqueta(null);
+      toast.success('Etiqueta criada!');
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Erro ao criar etiqueta.'),
+  });
+
   const { mutate, isPending } = useMutation({
     mutationFn: () => isEdit
       ? api.put(`/agenda/eventos/${evento.id}`, { ...form, etiquetaId: form.etiquetaId || null })
@@ -97,10 +116,82 @@ function EventoModal({ evento, etiquetas, onClose, onSaved }) {
           </div>
           <div>
             <label style={labelStyle}>Etiqueta</label>
-            <select className="input-base text-sm" value={form.etiquetaId} onChange={e => setForm(f => ({ ...f, etiquetaId: e.target.value }))}>
-              <option value="">Sem etiqueta</option>
-              {etiquetas.map(et => <option key={et.id} value={et.id}>{et.nome}</option>)}
-            </select>
+            <div className="flex items-center gap-2">
+              <select
+                className="input-base text-sm"
+                style={{ flex: 1 }}
+                value={form.etiquetaId}
+                onChange={e => setForm(f => ({ ...f, etiquetaId: e.target.value }))}
+              >
+                <option value="">Sem etiqueta</option>
+                {etiquetas.map(et => <option key={et.id} value={et.id}>{et.nome}</option>)}
+              </select>
+              <button
+                type="button"
+                title="Cadastrar nova etiqueta"
+                aria-label="Cadastrar nova etiqueta"
+                onClick={() => setNovaEtiqueta(n => n ? null : { nome: '', cor: '#C9A84C' })}
+                className="flex items-center justify-center rounded-lg shrink-0"
+                style={{
+                  width: 38, height: 38,
+                  border: '1px solid var(--border)',
+                  background: novaEtiqueta ? 'rgba(201,168,76,.18)' : 'rgba(201,168,76,.08)',
+                  color: 'var(--accent)',
+                }}
+              >
+                <i className={`fas ${novaEtiqueta ? 'fa-xmark' : 'fa-plus'} text-sm`} />
+              </button>
+            </div>
+
+            {novaEtiqueta && (
+              <div
+                className="mt-2 p-3 rounded-xl space-y-2 animate-fadeIn"
+                style={{ background: 'rgba(255,255,255,.03)', border: '1px solid var(--border)' }}
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    className="input-base text-sm"
+                    style={{ flex: 1 }}
+                    placeholder="Nome da etiqueta (ex: Audiência)"
+                    value={novaEtiqueta.nome}
+                    autoFocus
+                    onChange={e => setNovaEtiqueta(n => ({ ...n, nome: e.target.value }))}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && novaEtiqueta.nome.trim() && !criarEtiqueta.isPending) {
+                        e.preventDefault();
+                        criarEtiqueta.mutate();
+                      }
+                    }}
+                  />
+                  <input
+                    type="color"
+                    title="Cor da etiqueta"
+                    value={novaEtiqueta.cor}
+                    onChange={e => setNovaEtiqueta(n => ({ ...n, cor: e.target.value }))}
+                    style={{
+                      width: 38, height: 38, padding: 2, borderRadius: 10, cursor: 'pointer',
+                      border: '1px solid var(--border)', background: 'transparent',
+                    }}
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setNovaEtiqueta(null)} className="btn btn-ghost text-xs">
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => criarEtiqueta.mutate()}
+                    disabled={!novaEtiqueta.nome.trim() || criarEtiqueta.isPending}
+                    className="btn btn-gold text-xs"
+                  >
+                    {criarEtiqueta.isPending
+                      ? <span className="spinner" style={{ width: 12, height: 12 }} />
+                      : <i className="fas fa-check" />}
+                    {' '}Criar etiqueta
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           <div>
             <label style={labelStyle}>Descrição</label>

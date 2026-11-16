@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import useAuthStore from './store/authStore';
+import { BASE_PATH } from './utils/baseUrl';
 import UpdateOverlay from './components/UpdateOverlay';
 import Layout from './components/layout/Layout';
 import Login from './pages/auth/Login';
@@ -45,7 +46,9 @@ export default function App() {
   return (
     <>
     <UpdateOverlay />
-    <BrowserRouter>
+    {/* basename: no Electron e em dev vale "/"; publicado em
+        /jurix, faz o router ignorar o prefixo nas rotas. */}
+    <BrowserRouter basename={BASE_PATH || undefined}>
       <Routes>
         {/* Públicas */}
         <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />

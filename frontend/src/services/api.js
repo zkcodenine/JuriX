@@ -1,9 +1,13 @@
 import axios from 'axios';
 import { cacheResponse, getCachedResponse, isCacheablePath } from './offlineCache';
 import useConnectionStore from '../store/connectionStore';
+import { caminho } from '../utils/baseUrl';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  // Publicado em https://nossosflows.com.br/jurix, a API vive em
+  // /jurix/api — por isso o caminho base entra aqui. VITE_API_URL ainda
+  // permite apontar para um backend em outro dominio, se um dia separar.
+  baseURL: import.meta.env.VITE_API_URL || caminho('/api'),
   timeout: 45000, // 45s default (was 30s — too tight for 4G)
   headers: { 'Content-Type': 'application/json' },
 });

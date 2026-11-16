@@ -2,6 +2,7 @@
 
 const { app, BrowserWindow, dialog, shell, ipcMain, Tray, Menu, Notification, nativeImage } = require('electron')
 const path = require('path')
+const fs = require('fs')
 const http = require('http')
 const log = require('electron-log')
 
@@ -180,6 +181,8 @@ async function startBackend() {
       stdio: 'pipe',
     })
 
+    progresso(18, 'Iniciando o servidor interno')
+
     backendProcess.stdout?.on('data', (d) => log.info('[Backend]', d.toString().trim()))
     backendProcess.stderr?.on('data', (d) => log.warn('[Backend]', d.toString().trim()))
 
@@ -214,6 +217,7 @@ async function startBackend() {
         .get(`http://localhost:${BACKEND_PORT}/health`, (res) => {
           if (res.statusCode === 200) {
             log.info(`[Main] Backend pronto! (${attempts + 2}s)`)
+            progresso(82, 'Servidor pronto')
             resolve()
           } else {
             retry()
@@ -227,6 +231,12 @@ async function startBackend() {
         reject(new Error(`Backend não respondeu após ${MAX_TENTATIVAS} segundos.\nVerifique sua conexão e o arquivo .env.`))
         return
       }
+      // Alimenta a barra enquanto esperamos: 18% → 78% ao longo do tempo
+      // esperado de boot (mais longo na primeira abertura). É só uma estimativa
+      // — o marco real de 82% chega quando o /health responde.
+      const esperadoSegundos = global.__jurixPrimeiraAbertura ? 45 : 10
+      progresso(18 + Math.min(1, attempts / esperadoSegundos) * 60)
+
       // Loga de tempos em tempos para o log mostrar que ainda está esperando.
       if (attempts % 15 === 0) log.info(`[Main] Aguardando backend... ${attempts}s`)
       setTimeout(poll, 1000)
@@ -236,8 +246,43 @@ async function startBackend() {
   })
 }
 
+// ── Primeira abertura ─────────────────────────────────────────────────────────
+// O aviso "pode levar até 1 minuto" só faz sentido na PRIMEIRA abertura depois
+// de instalar ou atualizar — é quando o antivírus varre os arquivos novos e o
+// backend leva 30-45s em vez de ~6s. Nas aberturas seguintes o texto só
+// assustaria sem motivo.
+//
+// A marca fica num JSON no userData (sobrevive a updates; é apagada só na
+// desinstalação com limpeza de dados). Guardamos a versão para que cada
+// atualização volte a contar como "primeira abertura" daquela versão.
+const ARQUIVO_ESTADO = () => path.join(app.getPath('userData'), 'estado-abertura.json')
+
+function ehPrimeiraAbertura() {
+  try {
+    const bruto = fs.readFileSync(ARQUIVO_ESTADO(), 'utf8')
+    const estado = JSON.parse(bruto)
+    return estado?.ultimaVersaoAberta !== app.getVersion()
+  } catch (_) {
+    // Arquivo inexistente ou corrompido → trata como primeira abertura.
+    return true
+  }
+}
+
+function marcarAberturaConcluida() {
+  try {
+    fs.mkdirSync(app.getPath('userData'), { recursive: true })
+    fs.writeFileSync(
+      ARQUIVO_ESTADO(),
+      JSON.stringify({ ultimaVersaoAberta: app.getVersion(), em: new Date().toISOString() }, null, 2),
+      'utf8'
+    )
+  } catch (err) {
+    log.warn('[Main] Não foi possível gravar estado-abertura.json:', err.message)
+  }
+}
+
 // ── Loading window ────────────────────────────────────────────────────────────
-function createLoadingWindow() {
+function createLoadingWindow(primeiraAbertura) {
   loadingWindow = new BrowserWindow({
     width: 640,
     height: 480,
@@ -251,8 +296,20 @@ function createLoadingWindow() {
       contextIsolation: true,
     },
   })
-  loadingWindow.loadFile(path.join(__dirname, 'loading.html'))
+  loadingWindow.loadFile(path.join(__dirname, 'loading.html'), {
+    query: { primeira: primeiraAbertura ? '1' : '0' },
+  })
   loadingWindow.show()
+}
+
+// Empurra um marco real de progresso para a barra da tela de carregamento.
+// Best-effort: se a janela já fechou (ou ainda não carregou), ignora.
+function progresso(pct, texto) {
+  try {
+    if (!loadingWindow || loadingWindow.isDestroyed()) return
+    const js = `window.jurixProgresso && window.jurixProgresso(${Number(pct)}, ${JSON.stringify(texto || '')})`
+    loadingWindow.webContents.executeJavaScript(js).catch(() => {})
+  } catch (_) { /* best-effort */ }
 }
 
 // ── Main window ───────────────────────────────────────────────────────────────
@@ -298,10 +355,15 @@ function createMainWindow() {
   })
 
   mainWindow.once('ready-to-show', () => {
-    loadingWindow?.close()
-    loadingWindow = null
-    mainWindow.show()
-    mainWindow.maximize()
+    // Barra em 100% antes de fechar — o usuário vê a conclusão, não um corte.
+    progresso(100, 'Tudo pronto')
+    marcarAberturaConcluida()
+    setTimeout(() => {
+      loadingWindow?.close()
+      loadingWindow = null
+      mainWindow.show()
+      mainWindow.maximize()
+    }, 350)
   })
 
   mainWindow.on('closed', () => { mainWindow = null })
@@ -454,10 +516,15 @@ app.whenReady().then(async () => {
   // quando o app abria duas vezes. Aborta aqui e deixa a 1ª instância no ar.
   if (!gotTheLock) return
 
-  createLoadingWindow()
+  // Calculado uma única vez, ANTES de marcar a abertura como concluída.
+  global.__jurixPrimeiraAbertura = ehPrimeiraAbertura()
+  log.info('[Main] Primeira abertura desta versão:', global.__jurixPrimeiraAbertura)
+
+  createLoadingWindow(global.__jurixPrimeiraAbertura)
 
   try {
     await startBackend()
+    progresso(90, 'Abrindo o JuriX')
     const win = createMainWindow()
     criarBandeja()
 

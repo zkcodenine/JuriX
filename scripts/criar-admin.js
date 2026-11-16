@@ -14,7 +14,12 @@
 // ══════════════════════════════════════════════════════════════════
 // As dependências vivem em backend/node_modules — mesmo padrão do ativar-plano.js.
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '..', 'backend', '.env') });
+// O dotenv tambem vem de backend/node_modules, como o bcrypt e o Prisma
+// abaixo. Um `require('dotenv')` solto so funciona no repositorio de
+// desenvolvimento, que tem node_modules na raiz; no pacote publicado na
+// HostGator a raiz nao tem, e o script morria antes de abrir o banco.
+const dotenv = require(path.join(__dirname, '..', 'backend', 'node_modules', 'dotenv'));
+dotenv.config({ path: path.join(__dirname, '..', 'backend', '.env') });
 const bcrypt = require(path.join(__dirname, '..', 'backend', 'node_modules', 'bcryptjs'));
 const { PrismaClient } = require(path.join(__dirname, '..', 'backend', 'node_modules', '@prisma', 'client'));
 

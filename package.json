@@ -18,7 +18,9 @@
     "publish-release": "node scripts/publish-release.js",
     "release": "npm run build && node scripts/publish-release.js",
     "process-icon": "node scripts/process-icon.js",
-    "update-logo": "node scripts/update-logo.js"
+    "update-logo": "node scripts/update-logo.js",
+    "test": "cd backend && node testes/executar.js",
+    "test:web": "cd backend && node testes/executar.js --base https://nossosflows.com.br/jurix/api"
   },
   "dependencies": {
     "electron-log": "^5.2.0",

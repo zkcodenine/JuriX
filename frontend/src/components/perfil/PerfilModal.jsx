@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
+import { caminho } from '../../utils/baseUrl';
 import useAuthStore from '../../store/authStore';
 
 /* ── Integração Google Agenda ──────────────────────────── */
@@ -27,6 +28,20 @@ function GoogleAgendaSection() {
   const desconectarMut = useMutation({
     mutationFn: () => api.post('/google/disconnect'),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['google-status'] }); toast.success('Google Agenda desconectada.'); },
+  });
+
+  // Envia para a Google Agenda o que ja estava salvo no JuriX e ainda nao
+  // chegou la (compromissos, prazos de tarefa, prazos processuais, vencimentos).
+  const sincronizarMut = useMutation({
+    mutationFn: () => api.post('/google/sincronizar').then(r => r.data),
+    onSuccess: ({ resumo }) => {
+      const total = resumo.eventos + resumo.tarefas + resumo.prazos + resumo.parcelas;
+      toast.success(total === 0
+        ? 'Tudo ja estava sincronizado com a Google Agenda.'
+        : `${total} item(ns) enviados para a Google Agenda.`, { duration: 5000 });
+      if (resumo.falhas) toast.error(`${resumo.falhas} item(ns) nao puderam ser enviados.`);
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Nao foi possivel sincronizar agora.'),
   });
 
   const conectado = status?.conectado;
@@ -60,9 +75,19 @@ function GoogleAgendaSection() {
         </p>
 
         {conectado ? (
-          <button onClick={() => desconectarMut.mutate()} disabled={desconectarMut.isPending} className="btn btn-ghost w-full text-sm" style={{ color: 'var(--danger)' }}>
-            {desconectarMut.isPending ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <i className="fas fa-link-slash" />} Desconectar
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => sincronizarMut.mutate()}
+              disabled={sincronizarMut.isPending}
+              className="btn btn-gold flex-1 text-sm"
+              title="Enviar para a Google Agenda tudo que ainda nao foi sincronizado"
+            >
+              {sincronizarMut.isPending ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <i className="fas fa-rotate" />} Sincronizar agora
+            </button>
+            <button onClick={() => desconectarMut.mutate()} disabled={desconectarMut.isPending} className="btn btn-ghost flex-1 text-sm" style={{ color: 'var(--danger)' }}>
+              {desconectarMut.isPending ? <span className="spinner" style={{ width: 14, height: 14 }} /> : <i className="fas fa-link-slash" />} Desconectar
+            </button>
+          </div>
         ) : status?.configurado === false ? (
           <div className="btn btn-ghost w-full text-sm opacity-50 cursor-default">Em breve</div>
         ) : (
@@ -308,10 +333,10 @@ function AvatarUpload({ usuario, avatarUrl, onUpdate }) {
           }}
         >
           <img
-            src={avatarUrl ? `${avatarUrl}?t=${Date.now()}` : '/default-avatar.svg'}
+            src={avatarUrl ? `${avatarUrl}?t=${Date.now()}` : caminho('/default-avatar.svg')}
             alt="avatar"
             className="w-full h-full object-cover"
-            onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }}
+            onError={(e) => { e.currentTarget.src = caminho('/default-avatar.svg'); }}
           />
         </div>
         <div

@@ -1,9 +1,14 @@
 const router = require('express').Router();
 const auth = require('../middlewares/auth');
+const { bloqueiaEscritaSemPlano } = require('../middlewares/limitePlano');
 const { prisma } = require('../config/database');
 const gcal = require('../services/googleCalendarService');
 
 router.use(auth);
+// Cota do plano gratuito: acima de 5 processos a conta sem plano ativo entra
+// em modo somente-leitura ate assinar (ou excluir processos). GET e DELETE
+// continuam liberados de proposito — ver middlewares/limitePlano.js.
+router.use(bloqueiaEscritaSemPlano);
 
 // Espelha (ou remove) o prazo da tarefa na Google Agenda conforme o estado.
 // Mantém o googleEventId sincronizado no banco. Best-effort — nunca lança.

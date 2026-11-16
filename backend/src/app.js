@@ -11,6 +11,28 @@ const logger = require('./config/logger');
 
 const app = express();
 
+// ─── Atras de proxy (HostGator/Apache/Passenger, Cloudflare) ───────
+// Sem isto, req.ip seria sempre o IP do proxy: o rate limit trataria
+// TODOS os usuarios como um so e o express-rate-limit ainda reclama do
+// header X-Forwarded-For nao confiavel. 1 = confia no primeiro salto.
+if (process.env.TRUST_PROXY !== 'false') {
+  app.set('trust proxy', Number(process.env.TRUST_PROXY || 1));
+}
+
+// ─── Caminho base (subdiretorio do dominio) ────────────────────────
+// Publicado em https://nossosflows.com.br/jurix, as requisicoes podem
+// chegar com o prefixo /jurix (Apache + proxy) ou ja sem ele (Passenger
+// com sub-URI, que define SCRIPT_NAME). Normalizar aqui faz as rotas
+// funcionarem nos dois casos, sem duplicar cada `app.use`.
+const BASE_PATH = (process.env.BASE_PATH || '').replace(/\/+$/, '');
+if (BASE_PATH) {
+  app.use((req, _res, next) => {
+    if (req.url === BASE_PATH) req.url = '/';
+    else if (req.url.startsWith(BASE_PATH + '/')) req.url = req.url.slice(BASE_PATH.length);
+    next();
+  });
+}
+
 // ─── Segurança ─────────────────────────────────────
 // Quando o backend serve o frontend (Electron/produção), desabilita o CSP
 // do Helmet — o React build já é estático e a segurança real é via JWT.
@@ -33,9 +55,14 @@ app.use(helmet({
       },
 }));
 
+// Origens liberadas. Em producao, FRONTEND_URL aponta para o dominio
+// publicado; EXTRA_ORIGINS aceita uma lista separada por virgula (www,
+// dominio alternativo, app mobile em outro host).
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:3000',
+  'http://localhost:3000',
   'http://localhost:3001', // Electron (frontend served pelo backend)
+  ...(process.env.EXTRA_ORIGINS || '').split(',').map((o) => o.trim()).filter(Boolean),
 ];
 
 app.use(cors({
@@ -160,6 +187,10 @@ if (process.env.SERVE_FRONTEND === 'true') {
   const frontendDist =
     process.env.FRONTEND_DIST ||
     path.join(__dirname, '../../frontend/dist');
+
+  // O index.html buildado referencia os assets com o caminho base
+  // (/jurix/assets/...). Como as URLs ja foram normalizadas no topo, servir
+  // a pasta na raiz atende os dois formatos.
 
   app.use(express.static(frontendDist, { index: false }));
 

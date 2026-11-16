@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
+import ProcessoSelect from '../../components/ProcessoSelect';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 
@@ -431,12 +432,6 @@ export function GerarDocumentoModal({ modelo, processoPreSelecionado, onClose })
     }
   });
 
-  const { data: processos = [] } = useQuery({
-    queryKey: ['processos-select'],
-    queryFn: () => api.get('/processos', { params: { limite: 100 } }).then(r => r.data.processos || []),
-    enabled: !processoPreSelecionado,
-  });
-
   const { data: config = {} } = useQuery({
     queryKey: ['configuracoes-escritorio'],
     queryFn: () => api.get('/configuracoes/escritorio').then(r => r.data),
@@ -540,21 +535,10 @@ export function GerarDocumentoModal({ modelo, processoPreSelecionado, onClose })
                 <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
                   Vincular processo (opcional)
                 </label>
-                <select
-                  className="input-base"
-                  value={processoId}
-                  onChange={e => setProcessoId(e.target.value)}
-                >
-                  <option value="">Nenhum — apenas dados do escritório</option>
-                  {processos.map(p => {
-                    const cliente = p.partes?.find(x => x.tipo === 'AUTOR') || p.partes?.[0];
-                    return (
-                      <option key={p.id} value={p.id}>
-                        {cliente?.nome || '—'} — {p.numeroCnj || p.numero}
-                      </option>
-                    );
-                  })}
-                </select>
+                <ProcessoSelect
+                  value={processoId || null}
+                  onChange={(id) => setProcessoId(id || '')}
+                />
               </div>
               <button
                 onClick={() => preencher(processoId)}
