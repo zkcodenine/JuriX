@@ -37,3 +37,4 @@ Thumbs.db
 
 # Pacote de publicação web (gerado por build-web.ps1)
 deploy-web/
+jurix-web.tar.gz
